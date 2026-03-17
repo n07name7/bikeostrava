@@ -1,0 +1,35 @@
+graphhopper:
+  datareader.file: czech-republic-latest.osm.pbf
+  graph.location: graph-cache
+
+  profiles:
+    - name: bike
+      custom_model_files: [bike.json]
+
+    - name: bike_safe
+      custom_model_files: [bike.json]
+
+  profiles_ch:
+    - profile: bike
+
+  profiles_lm:
+    - profile: bike_safe
+
+  graph.encoded_values: road_class,road_class_link,road_environment,road_access,max_speed,surface,smoothness,bike_priority,bike_access,roundabout,bike_average_speed,bike_road_access,mtb_rating,hike_rating,country
+
+  graph.elevation.provider: srtm
+  graph.elevation.cache_dir: elevation-cache
+
+  import.osm.ignored_highways: motorway,trunk
+
+server:
+  application_connectors:
+    - type: http
+      port: 8991
+      bind_host: localhost
+  admin_connectors:
+    - type: http
+      port: 8992
+      bind_host: localhost
+  request_log:
+    appenders: []

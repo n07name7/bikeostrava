@@ -1,0 +1,1980 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BikeOstrava - Bezpečná cyklonavigace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #06090F;
+      --s0:      #080D15;
+      --s1:      #0D1520;
+      --s2:      #111C2C;
+      --s3:      #172236;
+      --border:  rgba(255,255,255,0.06);
+      --border-m:rgba(255,255,255,0.10);
+      --border-a:rgba(0,212,170,0.30);
+      --a:       #00D4AA;
+      --a2:      #00FFCC;
+      --a-glow:  rgba(0,212,170,0.30);
+      --a-muted: rgba(0,212,170,0.10);
+      --text:    #E8F0F8;
+      --muted:   #7A8898;
+      --dim:     #3E4C5A;
+      --green:   #22C55E;
+      --yellow:  #FBBF24;
+      --red:     #FF5252;
+      --violet:  #8B5CF6;
+      --r:       14px;
+      --r-sm:    10px;
+      --r-lg:    20px;
+      --ease:    cubic-bezier(0.4,0,0.2,1);
+      --ease-out:cubic-bezier(0.0,0,0.2,1);
+      --spring:  cubic-bezier(0.34,1.56,0.64,1);
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+      overflow: hidden;
+    }
+
+    /* ── MAP - full viewport ─────────────────────────────── */
+    #map {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      background: var(--bg);
+    }
+
+    /* ── SIDEBAR - floating glass panel ─────────────────── */
+    .sidebar {
+      position: fixed;
+      left: 16px; top: 16px; bottom: 16px;
+      width: 400px;
+      z-index: 1000;
+      border-radius: var(--r-lg);
+      background: rgba(8,13,21,0.88);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow:
+        0 0 0 1px rgba(0,0,0,0.5),
+        0 32px 80px rgba(0,0,0,0.7),
+        inset 0 1px 0 rgba(255,255,255,0.07),
+        inset 1px 0 0 rgba(255,255,255,0.03);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── HEADER - animated aurora ────────────────────────── */
+    .sidebar-head {
+      padding: 22px 22px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      flex-shrink: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .sidebar-head::before {
+      content: '';
+      position: absolute;
+      inset: -60%;
+      background:
+        radial-gradient(ellipse at 15% 25%, rgba(76,51,150,0.70) 0%, transparent 50%),
+        radial-gradient(ellipse at 85% 5%,  rgba(0,212,170,0.18) 0%, transparent 45%),
+        radial-gradient(ellipse at 5% 85%,  rgba(130,51,110,0.45) 0%, transparent 50%),
+        radial-gradient(ellipse at 90% 85%, rgba(30,80,140,0.35) 0%, transparent 50%);
+      animation: aurora 10s ease-in-out infinite alternate;
+      pointer-events: none;
+    }
+    @keyframes aurora {
+      0%   { transform: translate(0%,0%)     rotate(0deg)   scale(1.00); }
+      33%  { transform: translate(2%,-4%)    rotate(1.5deg) scale(1.06); }
+      66%  { transform: translate(-3%,2%)    rotate(-1deg)  scale(0.97); }
+      100% { transform: translate(1.5%,-2%)  rotate(0.5deg) scale(1.03); }
+    }
+
+    /* Logo */
+    .logo { display:flex; align-items:center; gap:12px; position:relative; margin-bottom:3px; }
+    .logo-icon {
+      width:40px; height:40px;
+      background: linear-gradient(135deg, rgba(0,212,170,0.18) 0%, rgba(139,92,246,0.15) 100%);
+      border: 1px solid rgba(0,212,170,0.30);
+      border-radius: var(--r-sm);
+      display:flex; align-items:center; justify-content:center;
+      font-size:20px;
+      flex-shrink:0;
+      box-shadow: 0 0 20px rgba(0,212,170,0.18), inset 0 1px 0 rgba(255,255,255,0.10);
+    }
+    .logo-text { line-height:1; }
+    .logo-name {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(120deg, #00D4AA 0%, #7C6AED 80%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      display: block;
+    }
+    .logo-sub {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-top: 1px;
+      display: block;
+    }
+    .logo-tag {
+      display:inline-block;
+      font-size:9px; font-weight:700;
+      color: var(--a);
+      background: var(--a-muted);
+      border: 1px solid var(--border-a);
+      border-radius: 6px;
+      padding: 1px 6px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      position: absolute;
+      top: 0; right: 0;
+    }
+
+    /* Weather strip */
+    .weather-strip {
+      display: flex; align-items: center; gap: 12px;
+      margin-top: 12px;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      font-size: 11.5px; font-weight: 500;
+      color: var(--muted);
+      flex-wrap: wrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 500ms var(--ease);
+      position: relative;
+    }
+    .weather-strip.visible { opacity:1; pointer-events:auto; }
+    .weather-item { display:flex; align-items:center; gap:5px; }
+    .aqi-pill {
+      padding: 2px 8px; border-radius:8px;
+      font-size:10px; font-weight:700; color:#fff;
+      background:#555; white-space:nowrap;
+    }
+
+    /* ── SIDEBAR BODY ─────────────────────────────────────── */
+    .sidebar-body {
+      flex:1; overflow-y:auto;
+      padding: 18px 20px 24px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.08) transparent;
+    }
+    .sidebar-body::-webkit-scrollbar { width:3px; }
+    .sidebar-body::-webkit-scrollbar-track { background:transparent; }
+    .sidebar-body::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:3px; }
+
+    /* ── SEARCH ───────────────────────────────────────────── */
+    .search-header {
+      display:flex; align-items:center; justify-content:space-between;
+      margin-bottom: 10px;
+    }
+    .section-label {
+      font-size:10.5px; font-weight:700;
+      color: var(--dim);
+      text-transform: uppercase; letter-spacing:1px;
+    }
+    .ostrava-badge {
+      font-size:10px; font-weight:700;
+      color: var(--a);
+      border: 1px solid rgba(0,212,170,0.25);
+      background: rgba(0,212,170,0.06);
+      border-radius:20px; padding:3px 10px;
+      white-space:nowrap; letter-spacing:0.2px;
+    }
+
+    .route-inputs {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border-m);
+      border-radius: var(--r);
+      overflow: hidden;
+      margin-bottom: 9px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04);
+      transition: border-color 200ms var(--ease), box-shadow 200ms var(--ease);
+    }
+    .route-inputs:focus-within {
+      border-color: rgba(0,212,170,0.45);
+      box-shadow: 0 0 0 3px rgba(0,212,170,0.10), 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .input-row { display:flex; align-items:center; }
+    .input-row + .input-row { border-top: 1px solid var(--border); }
+    .input-row:focus-within { background: rgba(0,212,170,0.02); }
+    .input-dot { width:44px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .dot { width:8px; height:8px; border-radius:50%; border:2px solid; }
+    .dot-start { border-color:var(--a);   background:var(--a);   box-shadow:0 0 8px rgba(0,212,170,0.5); }
+    .dot-end   { border-color:var(--red); background:var(--red); box-shadow:0 0 8px rgba(255,82,82,0.4); }
+    .input-row input {
+      flex:1; padding:13px 14px 13px 0;
+      background:transparent; border:none; outline:none;
+      color:var(--text); font-size:13.5px; font-family:inherit; font-weight:500;
+    }
+    .input-row input::placeholder { color:var(--dim); }
+
+    /* ── BUTTON ───────────────────────────────────────────── */
+    .btn-go {
+      width:100%; padding:13px;
+      background: linear-gradient(135deg, #00D4AA 0%, #009E80 100%);
+      color: #021A14;
+      border:none; border-radius:var(--r);
+      font-size:14px; font-weight:700; font-family:inherit;
+      cursor:pointer;
+      display:flex; align-items:center; justify-content:center; gap:8px;
+      letter-spacing:0.2px;
+      position:relative; overflow:hidden;
+      transition: transform 100ms var(--ease), box-shadow 200ms var(--ease);
+      animation: btnPulse 3s ease-in-out infinite;
+      margin-bottom: 11px;
+    }
+    @keyframes btnPulse {
+      0%,100% { box-shadow: 0 0 20px rgba(0,212,170,0.28), 0 4px 20px rgba(0,0,0,0.5); }
+      50%      { box-shadow: 0 0 36px rgba(0,212,170,0.50), 0 4px 24px rgba(0,0,0,0.5); }
+    }
+    .btn-go:hover:not(:disabled) {
+      background: linear-gradient(135deg, #00FFCC 0%, #00C49A 100%);
+      transform: translateY(-1px);
+    }
+    .btn-go:active:not(:disabled) { transform: scale(0.98); }
+    .btn-go:disabled { opacity:0.4; cursor:not-allowed; animation:none; box-shadow:none; }
+    /* Ripple */
+    .btn-go .ripple {
+      position:absolute; border-radius:50%;
+      background:rgba(255,255,255,0.25);
+      transform:scale(0); animation:ripple 500ms linear;
+      pointer-events:none;
+    }
+    @keyframes ripple { to { transform:scale(4); opacity:0; } }
+
+    /* ── CHIPS ────────────────────────────────────────────── */
+    .chips { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:18px; }
+    .chip {
+      padding:5px 11px;
+      background:rgba(255,255,255,0.025);
+      border: 1px solid var(--border);
+      border-radius:20px;
+      font-size:11px; font-weight:500; color:var(--muted);
+      cursor:pointer;
+      transition: all 180ms var(--ease);
+      white-space:nowrap;
+    }
+    .chip:hover {
+      border-color:rgba(0,212,170,0.35);
+      background:rgba(0,212,170,0.07);
+      color:var(--a);
+      box-shadow:0 0 14px rgba(0,212,170,0.10);
+    }
+
+    .sep { height:1px; background:var(--border); margin:2px 0 18px; }
+
+    /* ── WEATHER WARNING ──────────────────────────────────── */
+    .weather-warn {
+      display:none; align-items:center; gap:8px;
+      padding:9px 12px; border-radius:var(--r-sm);
+      font-size:12px; font-weight:600; line-height:1.4;
+      margin-bottom:14px;
+    }
+    .weather-warn.show { display:flex; }
+    .weather-warn.rain  { background:rgba(251,191,36,0.10); border:1px solid rgba(251,191,36,0.30); color:#FBBF24; }
+    .weather-warn.snow  { background:rgba(255,82,82,0.10);  border:1px solid rgba(255,82,82,0.30);  color:#FF5252; }
+    .weather-warn.wind  { background:rgba(139,92,246,0.10); border:1px solid rgba(139,92,246,0.30); color:#8B5CF6; }
+
+    /* ── LOADING ──────────────────────────────────────────── */
+    .loading { display:none; flex-direction:column; gap:16px; }
+    .loading.on { display:flex; }
+
+    .spin-wrap {
+      display:flex; align-items:center; justify-content:center;
+      gap:14px; padding:4px 0;
+    }
+    .spin-ring {
+      width:44px; height:44px;
+      border:2.5px solid rgba(255,255,255,0.06);
+      border-top-color: var(--a);
+      border-radius:50%;
+      animation: spin 0.7s linear infinite;
+      box-shadow: 0 0 20px rgba(0,212,170,0.15);
+      flex-shrink:0;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .spin-text { font-size:13px; font-weight:600; color:var(--muted); }
+    .spin-text span { color:var(--a); }
+
+    .steps { display:flex; flex-direction:column; gap:2px; }
+    .step {
+      display:flex; align-items:center; gap:10px;
+      padding:8px 12px; border-radius:var(--r-sm);
+      font-size:12px; font-weight:500; color:var(--dim);
+      transition: background 200ms, color 200ms;
+    }
+    .step.active { background:rgba(0,212,170,0.07); color:var(--a); border:1px solid rgba(0,212,170,0.12); }
+    .step.done   { color:var(--green); }
+    .step-icon   { font-size:13px; width:18px; text-align:center; flex-shrink:0; }
+
+    /* Skeleton cards */
+    .skel-cards { display:flex; flex-direction:column; gap:8px; }
+    .skel-card {
+      height: 72px;
+      border-radius: var(--r);
+      background: linear-gradient(90deg, var(--s1) 0%, var(--s2) 45%, var(--s3) 55%, var(--s1) 100%);
+      background-size: 400% 100%;
+      animation: shimmer 1.8s ease-in-out infinite;
+    }
+    .skel-card:nth-child(2) { height:120px; animation-delay:0.1s; }
+    .skel-card:nth-child(3) { height:90px;  animation-delay:0.2s; }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position:-200% 0; }
+    }
+
+    /* ── ERROR ────────────────────────────────────────────── */
+    .error-box {
+      display:none;
+      padding:13px 16px;
+      background:rgba(255,82,82,0.07);
+      border: 1px solid rgba(255,82,82,0.22);
+      border-radius:var(--r);
+      color:var(--red); font-size:12.5px; font-weight:500; line-height:1.6;
+    }
+    .error-box.on { display:block; }
+
+    /* ── RESULTS ──────────────────────────────────────────── */
+    .results { display:none; flex-direction:column; gap:12px; }
+    .results.on { display:flex; }
+    .results.on > * {
+      animation: fadeUp 280ms var(--ease-out) both;
+    }
+    .results.on > *:nth-child(1) { animation-delay:  0ms; }
+    .results.on > *:nth-child(2) { animation-delay: 55ms; }
+    .results.on > *:nth-child(3) { animation-delay:110ms; }
+    .results.on > *:nth-child(4) { animation-delay:165ms; }
+    .results.on > *:nth-child(5) { animation-delay:220ms; }
+    .results.on > *:nth-child(6) { animation-delay:270ms; }
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(12px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    /* ── SCORE HERO ───────────────────────────────────────── */
+    .score-hero {
+      border-radius: var(--r-lg);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+      background: var(--s1);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.06),
+        0 8px 32px rgba(0,0,0,0.5);
+    }
+    .score-hero::before {
+      content:'';
+      position:absolute; inset:0;
+      background: radial-gradient(ellipse at 80% 50%, var(--score-glow, rgba(0,212,170,0.12)) 0%, transparent 60%);
+      pointer-events:none;
+      transition: background 600ms var(--ease);
+    }
+    .score-inner { display:flex; align-items:center; gap:18px; position:relative; }
+    .score-ring-wrap { position:relative; width:88px; height:88px; flex-shrink:0; }
+    .score-ring-wrap svg { transform:rotate(-90deg); }
+    .srb { fill:none; stroke:rgba(255,255,255,0.06); stroke-width:5; }
+    .srf { fill:none; stroke-width:5; stroke-linecap:round;
+           transition: stroke-dashoffset 0.9s cubic-bezier(0.4,0,0.2,1), stroke 0.5s; }
+    .score-num {
+      position:absolute; inset:0;
+      display:flex; align-items:center; justify-content:center;
+      font-size:26px; font-weight:900; letter-spacing:-1px;
+      transition: color 0.5s;
+    }
+    .score-right { flex:1; min-width:0; }
+    .score-lbl {
+      font-size:9.5px; font-weight:700;
+      color:var(--dim); text-transform:uppercase; letter-spacing:1px;
+      margin-bottom:4px;
+    }
+    .score-verdict {
+      font-size:17px; font-weight:800; letter-spacing:-0.3px;
+      margin-bottom:10px;
+      transition: color 0.5s;
+    }
+    .score-meta { display:flex; gap:14px; }
+    .meta-item  { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--muted); }
+    .meta-val   { color:var(--text); font-weight:700; }
+
+    /* ── CARD ─────────────────────────────────────────────── */
+    .card {
+      background: var(--s1);
+      border: 1px solid var(--border);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 16px rgba(0,0,0,0.28);
+      border-radius: var(--r);
+      padding: 16px 18px;
+      transition: border-color 200ms var(--ease), box-shadow 200ms var(--ease);
+    }
+    .card:hover {
+      border-color: rgba(255,255,255,0.11);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 6px 24px rgba(0,0,0,0.35);
+    }
+    .card-title {
+      font-size:10px; font-weight:700;
+      color:var(--dim); text-transform:uppercase; letter-spacing:1px;
+      margin-bottom:14px;
+    }
+
+    /* ── SCORE BARS ───────────────────────────────────────── */
+    .bars { display:flex; flex-direction:column; gap:13px; }
+    .bar-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+    .bar-name { font-size:12px; font-weight:500; color:var(--text); display:flex; align-items:center; gap:7px; }
+    .bar-val  { font-size:12.5px; font-weight:700; }
+    .bar-track {
+      height:6px; background:rgba(255,255,255,0.04);
+      border-radius:3px; overflow:hidden;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.03);
+    }
+    .bar-fill {
+      height:100%; border-radius:3px;
+      transition: width 0.75s var(--ease-out), background 0.5s;
+    }
+
+    /* ── HIGHLIGHTS ───────────────────────────────────────── */
+    .highlights { display:flex; flex-direction:column; gap:3px; }
+    .hl {
+      display:flex; align-items:flex-start; gap:10px;
+      padding:9px 11px; border-radius:var(--r-sm);
+      font-size:12px; font-weight:500; line-height:1.5;
+      background:rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+    }
+    .hl-icon { font-size:13px; flex-shrink:0; margin-top:1px; }
+    .hl-text { color:var(--muted); }
+
+    /* ── ALTERNATIVES ─────────────────────────────────────── */
+    .alt-section { display:none; }
+    .alt-section.on { display:block; }
+    .alt-grid { display:flex; gap:7px; }
+    .alt-tab {
+      flex:1; min-width:0;
+      padding:12px 12px;
+      background: var(--s1);
+      border: 1.5px solid var(--border-m);
+      border-radius: var(--r-sm);
+      cursor:pointer; text-align:left;
+      transition: border-color 170ms var(--ease), background 170ms var(--ease), transform 120ms var(--spring);
+      color: var(--text); font-family:inherit;
+    }
+    .alt-tab:hover:not(.active) {
+      border-color:rgba(255,255,255,0.18);
+      background:var(--s2);
+      transform:translateY(-1px);
+    }
+    .alt-tab.active {
+      border-color: var(--a);
+      background: linear-gradient(135deg, rgba(0,212,170,0.09) 0%, rgba(0,212,170,0.04) 100%);
+      box-shadow: inset 0 1px 0 rgba(0,212,170,0.18);
+    }
+    .alt-lbl  { font-size:9px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:0.7px; margin-bottom:5px; }
+    .alt-score{ font-size:22px; font-weight:900; line-height:1; margin-bottom:4px; letter-spacing:-0.5px; }
+    .alt-meta { font-size:10px; color:var(--muted); font-weight:500; }
+
+    /* ── EXPORT ───────────────────────────────────────────── */
+    .export-row { display:flex; gap:7px; }
+    .btn-pdf, .btn-gpx, .btn-share {
+      flex:1;
+      display:flex; align-items:center; justify-content:center; gap:6px;
+      padding:11px 8px;
+      background:rgba(255,255,255,0.03);
+      border: 1px solid var(--border-m);
+      border-radius:var(--r);
+      color:var(--muted); font-size:12px; font-weight:600; font-family:inherit;
+      text-decoration:none; cursor:pointer;
+      transition: all 150ms var(--ease);
+    }
+    .btn-pdf:hover {
+      border-color:var(--border-a); color:var(--a);
+      background:rgba(0,212,170,0.07);
+      box-shadow:0 0 16px rgba(0,212,170,0.12);
+      transform:translateY(-1px);
+    }
+    .btn-gpx:hover {
+      border-color:rgba(34,197,94,0.40); color:var(--green);
+      background:rgba(34,197,94,0.07);
+      box-shadow:0 0 16px rgba(34,197,94,0.10);
+      transform:translateY(-1px);
+    }
+    .btn-share:hover {
+      border-color:rgba(139,92,246,0.40); color:var(--violet);
+      background:rgba(139,92,246,0.07);
+      box-shadow:0 0 16px rgba(139,92,246,0.10);
+      transform:translateY(-1px);
+    }
+    .btn-share.copied { border-color:rgba(34,197,94,0.40); color:var(--green); }
+
+    /* ── LEAFLET DARK TOOLTIP ─────────────────────────────── */
+    .dark-tip {
+      background:var(--s0)!important;
+      border:1px solid var(--border-m)!important;
+      color:var(--text)!important;
+      font-size:11px!important;
+      font-family:'Plus Jakarta Sans',sans-serif!important;
+      box-shadow:0 4px 20px rgba(0,0,0,0.6)!important;
+    }
+    .dark-tip::before { border-top-color:var(--border-m)!important; }
+
+    /* ── MAP CLICK POPUP ──────────────────────────────────── */
+    .map-pick-popup { display:flex; gap:6px; padding:2px 0; }
+    .map-pick-btn {
+      flex:1; padding:7px 10px;
+      border:1px solid var(--border-m);
+      border-radius:var(--r-sm);
+      background:var(--s2); color:var(--text);
+      font-size:12px; font-weight:600;
+      font-family:'Plus Jakarta Sans',sans-serif;
+      cursor:pointer; white-space:nowrap;
+      transition: background 150ms, border-color 150ms;
+    }
+    .map-pick-btn:hover { background:var(--s3); border-color:var(--border-a); color:var(--a); }
+    .map-pick-label {
+      font-size:11px; color:var(--muted);
+      margin-bottom:8px; text-align:center;
+      font-family:'Plus Jakarta Sans',sans-serif;
+    }
+
+    /* ── LEGEND - bottom right ────────────────────────────── */
+    .legend {
+      display:none;
+      position:fixed;
+      bottom:24px; right:16px;
+      z-index:500;
+      background:rgba(8,13,21,0.92);
+      backdrop-filter:blur(20px);
+      -webkit-backdrop-filter:blur(20px);
+      border:1px solid rgba(255,255,255,0.09);
+      box-shadow:0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.3);
+      border-radius:var(--r);
+      padding:13px 16px;
+      font-size:11px; min-width:152px;
+    }
+    .legend.on { display:block; animation: fadeUp 250ms var(--ease-out) both; }
+    .legend-title {
+      font-size:9px; font-weight:700;
+      text-transform:uppercase; letter-spacing:1px;
+      color:var(--dim); margin-bottom:10px;
+    }
+    .legend-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; color:var(--muted); font-weight:500; }
+    .legend-row:last-child { margin-bottom:0; }
+    .l-line { width:18px; height:3px; border-radius:2px; flex-shrink:0; }
+    .l-dot  { width:10px; height:10px; border-radius:50%; border:1.5px solid rgba(255,255,255,0.4); flex-shrink:0; }
+
+    /* ── LEAFLET OVERRIDES ────────────────────────────────── */
+    .leaflet-control-attribution {
+      background:rgba(6,9,15,0.85)!important;
+      color:var(--dim)!important; font-size:10px!important;
+      border-top:1px solid var(--border)!important;
+      border-radius:6px 0 0 0 !important;
+    }
+    .leaflet-control-attribution a { color:var(--a)!important; }
+    .leaflet-popup-content-wrapper {
+      background:var(--s1)!important; color:var(--text)!important;
+      border:1px solid var(--border-m)!important;
+      border-radius:var(--r)!important;
+      box-shadow:0 12px 40px rgba(0,0,0,0.7)!important;
+      font-family:'Plus Jakarta Sans',sans-serif!important;
+    }
+    .leaflet-popup-tip { background:var(--s1)!important; }
+    .leaflet-popup-close-button { color:var(--muted)!important; font-size:16px!important; }
+    .leaflet-bar a {
+      background:rgba(8,13,21,0.92)!important;
+      backdrop-filter:blur(12px)!important;
+      color:var(--text)!important;
+      border-color:var(--border-m)!important;
+    }
+    .leaflet-bar a:hover { background:var(--s2)!important; color:var(--a)!important; }
+
+    /* Pulsing start marker */
+    .pulse-marker {
+      position:relative;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .pulse-ring {
+      position:absolute;
+      border-radius:50%; border:2px solid;
+      animation: pulseRing 2s ease-out infinite;
+    }
+    @keyframes pulseRing {
+      0%   { transform:scale(1);   opacity:0.8; }
+      100% { transform:scale(3.5); opacity:0; }
+    }
+
+    /* ── ALT COMPARISON ──────────────────────────────────── */
+    .alt-comparison {
+      padding:8px 12px;
+      background:rgba(34,197,94,0.06);
+      border:1px solid rgba(34,197,94,0.15);
+      border-radius:var(--r-sm);
+      margin-bottom:10px;
+      font-size:11.5px; font-weight:600;
+      color:var(--green);
+      display:flex; align-items:center; gap:7px;
+    }
+
+    /* ── ELEVATION CHART ──────────────────────────────────── */
+    .elev-stats {
+      display:flex; gap:14px; margin-top:8px;
+      font-size:11px; font-weight:600; color:var(--muted);
+    }
+    .elev-stat { display:flex; align-items:center; gap:4px; }
+    .elev-stat .up   { color:#22C55E; }
+    .elev-stat .down { color:#FF5252; }
+    .elev-tooltip {
+      background: rgba(0,0,0,0.75) !important;
+      border: 1px solid #00D4AA !important;
+      color: #fff !important;
+      font-weight: 600 !important;
+      font-size: 12px !important;
+      padding: 3px 8px !important;
+      border-radius: 6px !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4) !important;
+    }
+    .elev-tooltip::before { border-top-color: #00D4AA !important; }
+
+    /* ── SURFACE BAR ─────────────────────────────────────── */
+    .surface-bar {
+      display:flex; height:10px; border-radius:5px; overflow:hidden;
+      background:rgba(255,255,255,0.04); margin-bottom:10px;
+    }
+    .surface-bar > div { transition: width 0.6s var(--ease-out); }
+    .surface-legend {
+      display:flex; flex-wrap:wrap; gap:10px;
+      font-size:11px; font-weight:500; color:var(--muted);
+    }
+    .surface-legend-item {
+      display:flex; align-items:center; gap:5px;
+    }
+    .surface-legend-dot {
+      width:8px; height:8px; border-radius:2px; flex-shrink:0;
+    }
+    .surface-legend-val { color:var(--text); font-weight:700; }
+
+    /* ── SAFETY TIPS ─────────────────────────────────────── */
+    .tips-list { display:flex; flex-direction:column; gap:4px; }
+    .tip {
+      display:flex; align-items:flex-start; gap:9px;
+      padding:9px 11px; border-radius:var(--r-sm);
+      font-size:11.5px; font-weight:500; line-height:1.5;
+      background:rgba(0,212,170,0.04);
+      border: 1px solid rgba(0,212,170,0.10);
+      color:var(--muted);
+    }
+    .tip-icon { font-size:13px; flex-shrink:0; margin-top:1px; }
+
+    /* ── RECENT ROUTES ───────────────────────────────────── */
+    .recent-list { display:flex; flex-direction:column; gap:5px; }
+    .recent-item {
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px;
+      background:rgba(255,255,255,0.02);
+      border:1px solid var(--border);
+      border-radius:var(--r-sm);
+      cursor:pointer;
+      transition: all 160ms var(--ease);
+      font-size:12px; font-weight:500;
+    }
+    .recent-item:hover {
+      background:rgba(0,212,170,0.05);
+      border-color:var(--border-a);
+    }
+    .recent-score {
+      font-size:13px; font-weight:800;
+      width:32px; text-align:center; flex-shrink:0;
+    }
+    .recent-route { flex:1; min-width:0; }
+    .recent-addrs {
+      color:var(--text); white-space:nowrap;
+      overflow:hidden; text-overflow:ellipsis;
+    }
+    .recent-meta { font-size:10px; color:var(--dim); margin-top:1px; }
+    .recent-arrow { color:var(--dim); font-size:14px; flex-shrink:0; }
+
+    /* ── PRO TEASER ──────────────────────────────────────── */
+    .pro-teaser {
+      display:flex; align-items:center; gap:12px;
+      padding:14px 16px;
+      background: linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(0,212,170,0.05) 100%);
+      border: 1px solid rgba(139,92,246,0.20);
+      border-radius:var(--r);
+      cursor:pointer;
+      transition: all 200ms var(--ease);
+    }
+    .pro-teaser:hover {
+      border-color:rgba(139,92,246,0.40);
+      box-shadow: 0 0 20px rgba(139,92,246,0.10);
+    }
+    .pro-badge {
+      background: linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);
+      color:#fff; font-size:9px; font-weight:800;
+      padding:3px 8px; border-radius:6px;
+      letter-spacing:1px; flex-shrink:0;
+    }
+    .pro-text { flex:1; min-width:0; }
+    .pro-title { font-size:12px; font-weight:700; color:var(--text); }
+    .pro-desc  { font-size:10.5px; color:var(--muted); margin-top:1px; }
+    .pro-price { font-size:11px; font-weight:700; color:var(--violet); flex-shrink:0; }
+
+    /* ── MOBILE ───────────────────────────────────────────── */
+    .mobile-handle { display:none; }
+    .mobile-map-toggle { display:none; }
+
+    @media (max-width:720px) {
+      .sidebar {
+        left:0; right:0; bottom:0; top:auto;
+        width:100%;
+        height: var(--sheet-h, 52vh);
+        max-height: 92vh;
+        border-radius: var(--r-lg) var(--r-lg) 0 0;
+        border-bottom:none;
+        border-left:none; border-right:none;
+        transition: height 350ms var(--ease);
+      }
+
+      /* Peek state - just search visible */
+      .sidebar.peek { --sheet-h: 220px; }
+      /* Half state - results visible */
+      .sidebar.half { --sheet-h: 55vh; }
+      /* Full state - all content */
+      .sidebar.full { --sheet-h: 92vh; }
+
+      /* Drag handle */
+      .mobile-handle {
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:8px 0 4px;
+        cursor:grab;
+        -webkit-tap-highlight-color:transparent;
+      }
+      .mobile-handle-bar {
+        width:36px; height:4px;
+        background:rgba(255,255,255,0.20);
+        border-radius:2px;
+      }
+
+      /* Map toggle button (floating) */
+      .mobile-map-toggle {
+        display:flex;
+        position:fixed;
+        z-index:1001;
+        bottom: calc(var(--sheet-h, 52vh) + 10px);
+        left:50%; transform:translateX(-50%);
+        padding:8px 18px;
+        background:rgba(8,13,21,0.92);
+        backdrop-filter:blur(16px);
+        border:1px solid var(--border-m);
+        border-radius:20px;
+        color:var(--text);
+        font-size:12px; font-weight:600;
+        font-family:inherit;
+        cursor:pointer;
+        gap:6px; align-items:center;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        transition: bottom 350ms var(--ease), opacity 200ms;
+      }
+      .sidebar.peek ~ .mobile-map-toggle { bottom: 230px; }
+      .sidebar.half ~ .mobile-map-toggle { bottom: calc(55vh + 10px); }
+      .sidebar.full ~ .mobile-map-toggle { bottom: calc(92vh + 10px); opacity:0; pointer-events:none; }
+
+      /* Header compact on mobile */
+      .sidebar-head { padding:14px 18px 12px; }
+      .logo-icon { width:34px; height:34px; font-size:17px; }
+      .logo-name { font-size:17px; }
+      .logo-sub  { font-size:9px; }
+      .logo-tag  { font-size:8px; padding:1px 5px; }
+      .weather-strip { margin-top:8px; padding:6px 8px; gap:10px; font-size:10.5px; }
+
+      /* Body padding */
+      .sidebar-body { padding:14px 16px 24px; }
+
+      /* Larger touch targets */
+      .input-row input { padding:15px 14px 15px 0; font-size:15px; }
+      .btn-go { padding:15px; font-size:15px; }
+      .chip { padding:8px 14px; font-size:12px; }
+      .chips { gap:7px; }
+
+      /* Export buttons bigger */
+      .btn-pdf, .btn-gpx, .btn-share { padding:14px 10px; font-size:13px; }
+
+      /* Alt tabs stack on very small screens */
+      .alt-grid { flex-wrap:wrap; }
+      .alt-tab { min-width:calc(50% - 4px); }
+
+      /* Legend repositioned */
+      .legend {
+        bottom:auto;
+        top:10px; right:10px;
+        left:auto;
+        max-width:calc(100vw - 20px);
+      }
+
+      /* Score hero compact */
+      .score-ring-wrap { width:72px; height:72px; }
+      .score-ring-wrap svg { width:72px; height:72px; }
+      .score-num { font-size:22px; }
+      .score-verdict { font-size:15px; }
+
+      /* Pro teaser compact */
+      .pro-teaser { padding:12px 14px; gap:10px; }
+      .pro-desc { font-size:10px; }
+
+      /* Recent routes */
+      .recent-item { padding:12px 14px; }
+    }
+
+    /* Very small phones */
+    @media (max-width:380px) {
+      .sidebar-body { padding:12px 14px 20px; }
+      .score-meta { flex-direction:column; gap:6px; }
+      .export-row { flex-wrap:wrap; }
+      .btn-pdf, .btn-gpx, .btn-share { min-width:calc(50% - 4px); flex:none; }
+      .btn-share { flex:1 1 100%; }
+    }
+
+    /* ── REDUCED MOTION ───────────────────────────────────── */
+    @media (prefers-reduced-motion:reduce) {
+      *,*::before,*::after {
+        animation-duration:0.01ms!important;
+        animation-iteration-count:1!important;
+        transition-duration:0.01ms!important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<aside class="sidebar" id="sidebar">
+  <div class="mobile-handle" id="mobile-handle">
+    <div class="mobile-handle-bar"></div>
+  </div>
+  <div class="sidebar-head">
+    <div class="logo">
+      <div class="logo-icon">🚲</div>
+      <div class="logo-text">
+        <span class="logo-name">BikeOstrava</span>
+        <span class="logo-sub">Bezpečná cyklonavigace</span>
+      </div>
+      <span class="logo-tag">beta</span>
+    </div>
+    <div class="weather-strip" id="weather-strip">
+      <div class="weather-item"><span id="w-icon">☀️</span>&nbsp;<span id="w-temp">-</span></div>
+      <div class="weather-item">💨&nbsp;<span id="w-wind">-</span></div>
+      <div class="weather-item">Vzduch:&nbsp;<span class="aqi-pill" id="w-aqi">-</span></div>
+    </div>
+  </div>
+
+  <div class="sidebar-body">
+
+    <div class="search-header">
+      <div class="section-label">Naplánovat trasu</div>
+      <div class="ostrava-badge">📍 Jen Ostrava</div>
+    </div>
+
+    <div class="route-inputs">
+      <div class="input-row">
+        <div class="input-dot"><div class="dot dot-start"></div></div>
+        <input id="inp-start" type="text" placeholder="Odkud…" autocomplete="off" />
+      </div>
+      <div class="input-row">
+        <div class="input-dot"><div class="dot dot-end"></div></div>
+        <input id="inp-end"   type="text" placeholder="Kam…"   autocomplete="off" />
+      </div>
+    </div>
+
+    <div class="weather-warn" id="weather-warn"></div>
+
+    <button class="btn-go" id="btn-go" onclick="doRoute()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+      Najít nejbezpečnější trasu
+    </button>
+
+    <div class="chips">
+      <span class="chip" onclick="fill('VŠB-TUO Ostrava Poruba','Masarykovo náměstí Ostrava')">VŠB → centrum</span>
+      <span class="chip" onclick="fill('Hlavní nádraží Ostrava','Sad Boženy Němcové Ostrava')">Nádraží → park</span>
+      <span class="chip" onclick="fill('Forum Nová Karolina Ostrava','Stodolní Ostrava')">Karolina → Stodolní</span>
+      <span class="chip" onclick="fill('Ostrava Poruba','Ostrava-Jih')">Poruba → Jih</span>
+    </div>
+
+    <div class="sep"></div>
+
+    <!-- Loading -->
+    <div class="loading" id="loading">
+      <div class="spin-wrap">
+        <div class="spin-ring"></div>
+        <div class="spin-text">Hledám <span>bezpečnou trasu</span>…</div>
+      </div>
+      <div class="steps">
+        <div class="step" id="s-geo"><span class="step-icon">📍</span> Geokódování adres</div>
+        <div class="step" id="s-rt"> <span class="step-icon">🗺</span> Výpočet alternativ</div>
+        <div class="step" id="s-osm"><span class="step-icon">🌿</span> Cyklostezky a zelené zóny</div>
+        <div class="step" id="s-scr"><span class="step-icon">⚡</span> Výpočet bezpečnostního skóre</div>
+      </div>
+      <div class="skel-cards">
+        <div class="skel-card"></div>
+        <div class="skel-card"></div>
+        <div class="skel-card"></div>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div class="error-box" id="err"></div>
+
+    <!-- Results -->
+    <div class="results" id="results">
+
+      <!-- Score hero -->
+      <div class="score-hero" id="score-hero">
+        <div class="score-inner">
+          <div class="score-ring-wrap">
+            <svg width="88" height="88" viewBox="0 0 88 88">
+              <circle class="srb" cx="44" cy="44" r="38"/>
+              <circle class="srf" id="ring-fill" cx="44" cy="44" r="38"
+                stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
+            </svg>
+            <div class="score-num" id="ring-num">–</div>
+          </div>
+          <div class="score-right">
+            <div class="score-lbl">Skóre bezpečnosti</div>
+            <div class="score-verdict" id="verdict">–</div>
+            <div class="score-meta">
+              <div class="meta-item">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>
+                <span class="meta-val" id="m-dist">–</span>
+              </div>
+              <div class="meta-item">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span class="meta-val" id="m-time">–</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Breakdown -->
+      <div class="card">
+        <div class="card-title">Hodnocení trasy</div>
+        <div class="bars">
+          <div>
+            <div class="bar-top">
+              <span class="bar-name"><span>🛣</span> Cyklostezky</span>
+              <span class="bar-val" id="b-bike-val">–</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" id="b-bike" style="width:0"></div></div>
+          </div>
+          <div>
+            <div class="bar-top">
+              <span class="bar-name"><span>⚠️</span> Bezpečnost</span>
+              <span class="bar-val" id="b-acc-val">–</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" id="b-acc" style="width:0"></div></div>
+          </div>
+          <div>
+            <div class="bar-top">
+              <span class="bar-name"><span>🌿</span> Zelené zóny</span>
+              <span class="bar-val" id="b-green-val">–</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" id="b-green" style="width:0"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Highlights -->
+      <div class="card">
+        <div class="card-title">Klíčové informace</div>
+        <div class="highlights" id="hl-list"></div>
+      </div>
+
+      <!-- Elevation profile -->
+      <div class="card" id="elev-card" style="display:none">
+        <div class="card-title">Výškový profil</div>
+        <canvas id="elev-canvas" width="700" height="140" style="width:100%;height:90px;border-radius:8px"></canvas>
+        <div class="elev-stats" id="elev-stats"></div>
+      </div>
+
+      <!-- Route composition -->
+      <div class="card" id="surface-card" style="display:none">
+        <div class="card-title">Složení trasy</div>
+        <div class="surface-bar" id="surface-bar"></div>
+        <div class="surface-legend" id="surface-legend"></div>
+      </div>
+
+      <!-- Safety tips -->
+      <div class="card" id="tips-card" style="display:none">
+        <div class="card-title">Bezpečnostní tipy</div>
+        <div class="tips-list" id="tips-list"></div>
+      </div>
+
+      <!-- Alternatives -->
+      <div class="alt-section" id="alt-section">
+        <div class="card">
+          <div class="card-title">Alternativní trasy</div>
+          <div class="alt-comparison" id="alt-comparison" style="display:none"></div>
+          <div class="alt-grid" id="alt-tabs"></div>
+        </div>
+      </div>
+
+      <!-- Export -->
+      <div class="export-row">
+        <a class="btn-pdf" id="btn-pdf" href="#" target="_blank">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          PDF
+        </a>
+        <a class="btn-gpx" id="btn-gpx" href="#" target="_blank">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+          GPX
+        </a>
+        <button class="btn-share" id="btn-share" onclick="shareRoute()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+          Sdílet
+        </button>
+      </div>
+
+    </div><!-- /results -->
+
+    <!-- Recent routes (always visible if history exists) -->
+    <div class="recent-section" id="recent-section" style="display:none">
+      <div class="sep"></div>
+      <div class="section-label" style="margin-bottom:10px">Poslední trasy</div>
+      <div class="recent-list" id="recent-list"></div>
+    </div>
+
+    <!-- Pro teaser -->
+    <div class="sep" style="margin-top:20px"></div>
+    <div class="pro-teaser" id="pro-teaser">
+      <div class="pro-badge">PRO</div>
+      <div class="pro-text">
+        <div class="pro-title">BikeOstrava Pro</div>
+        <div class="pro-desc">Neomezené trasy, týdenní reporty, offline mapy, prioritní podpora</div>
+      </div>
+      <div class="pro-price">Brzy</div>
+    </div>
+
+  </div><!-- /sidebar-body -->
+</aside>
+
+<!-- Legend -->
+<div class="legend" id="legend">
+  <div class="legend-title">Legenda</div>
+  <div class="legend-row"><div class="l-line" style="background:#22C55E;height:4px"></div> Cyklostezka</div>
+  <div class="legend-row"><div class="l-line" style="background:#00D4AA"></div> Klidná ulice</div>
+  <div class="legend-row"><div class="l-line" style="background:#F0A030"></div> Frekventovaná silnice</div>
+  <div class="legend-row"><div class="l-dot" style="background:rgba(34,197,94,.25);border-color:#22C55E;width:12px;height:12px;border-radius:3px"></div> Park / les</div>
+  <div class="legend-row"><div class="l-dot" style="background:#FF8C00"></div> Nehoda s cyklistou</div>
+  <div class="legend-row"><div class="l-dot" style="background:#E05252"></div> Veloservis 🔧</div>
+  <div class="legend-row"><div class="l-dot" style="background:#4A9ECD"></div> Pitná voda 💧</div>
+</div>
+
+<button class="mobile-map-toggle" id="mobile-map-toggle" onclick="toggleSheet()">
+  🗺 Mapa
+</button>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ── Map init ─────────────────────────────────────────────── */
+const map = L.map('map', {
+  center: [49.8209, 18.2625], zoom: 13,
+  zoomControl: false,
+  attributionControl: true,
+});
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/attributions">CARTO</a>',
+  subdomains: 'abcd', maxZoom: 19,
+}).addTo(map);
+
+let routeLayers = [];
+let sharedLayers = [];
+let pickStartMarker = null;
+let pickEndMarker   = null;
+let elevMarker      = null;   // hover marker on map from elevation profile
+
+function clearRouteOnly() { routeLayers.forEach(l => map.removeLayer(l)); routeLayers = []; }
+function clearMap() {
+  clearRouteOnly();
+  sharedLayers.forEach(l => map.removeLayer(l)); sharedLayers = [];
+  if (pickStartMarker) { map.removeLayer(pickStartMarker); pickStartMarker = null; }
+  if (pickEndMarker)   { map.removeLayer(pickEndMarker);   pickEndMarker   = null; }
+  if (elevMarker)      { map.removeLayer(elevMarker);      elevMarker      = null; }
+  $('legend').classList.remove('on');
+}
+
+/* ── State ───────────────────────────────────────────────── */
+let currentData  = null;
+let currentAlts  = [];
+let activeAltIdx = 0;
+
+/* ── Helpers ─────────────────────────────────────────────── */
+const $ = id => document.getElementById(id);
+
+function fill(a, b) {
+  const s = $('inp-start'), e = $('inp-end');
+  s.value = a; delete s.dataset.lat; delete s.dataset.lng;
+  e.value = b; delete e.dataset.lat; delete e.dataset.lng;
+}
+
+function scoreColor(s) { return s >= 70 ? '#22C55E' : s >= 45 ? '#FBBF24' : '#FF5252'; }
+function scoreGlow(s)  { return s >= 70 ? 'rgba(34,197,94,0.18)' : s >= 45 ? 'rgba(251,191,36,0.18)' : 'rgba(255,82,82,0.18)'; }
+function scoreVerdict(s) {
+  return s >= 80 ? 'Výborně bezpečná' : s >= 65 ? 'Poměrně bezpečná' : s >= 45 ? 'Průměrně bezpečná' : 'Méně bezpečná trasa';
+}
+function hlIcon(t) {
+  return t.includes('cyklostezk') || t.includes('cyklopru') ? '🛣'
+       : t.includes('nehod') || t.includes('Pozor') ? '⚠️'
+       : t.includes('zelen') || t.includes('Průjezd') ? '🌿' : '✅';
+}
+
+/* ── Steps ───────────────────────────────────────────────── */
+function setStep(id, st) {
+  const el = $(id); el.classList.remove('active','done');
+  if (st) el.classList.add(st);
+}
+function resetSteps() { ['s-geo','s-rt','s-osm','s-scr'].forEach(s => setStep(s,'')); }
+
+function showLoading() {
+  $('loading').classList.add('on');
+  $('results').classList.remove('on');
+  $('err').classList.remove('on');
+  $('btn-go').disabled = true;
+  resetSteps();
+}
+function hideLoading() { $('loading').classList.remove('on'); $('btn-go').disabled = false; }
+function showError(msg) {
+  hideLoading();
+  $('err').textContent = '⚠️  ' + msg;
+  $('err').classList.add('on');
+}
+
+/* ── Score bar setter ────────────────────────────────────── */
+function setBar(id, val) {
+  const fill = $(id), valEl = $(id + '-val');
+  const n = (val == null) ? 0 : Math.max(0, Math.min(100, val));
+  const c = (val == null) ? '#555' : scoreColor(n);
+  // Animate from 0
+  fill.style.width = '0';
+  fill.style.background = c;
+  valEl.textContent = (val == null) ? 'N/A' : n;
+  valEl.style.color = c;
+  requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = n + '%'; }));
+}
+
+/* ── Animated score counter ──────────────────────────────── */
+function animateCount(el, target, duration = 900) {
+  const start = performance.now();
+  const startVal = 0;
+  function frame(now) {
+    const p = Math.min(1, (now - start) / duration);
+    const ease = 1 - Math.pow(1 - p, 3); // ease-out cubic
+    el.textContent = Math.round(startVal + (target - startVal) * ease);
+    if (p < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ── Button ripple ───────────────────────────────────────── */
+document.getElementById('btn-go').addEventListener('click', function(e) {
+  const r = document.createElement('span');
+  r.classList.add('ripple');
+  const rect = this.getBoundingClientRect();
+  const size = Math.max(rect.width, rect.height);
+  r.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX-rect.left-size/2}px;top:${e.clientY-rect.top-size/2}px`;
+  this.appendChild(r);
+  setTimeout(() => r.remove(), 600);
+});
+
+/* ── Route fetch ─────────────────────────────────────────── */
+async function doRoute() {
+  const start = $('inp-start').value.trim(), end = $('inp-end').value.trim();
+  if (!start || !end) { showError('Zadejte prosím výchozí bod i cíl.'); return; }
+
+  clearMap(); showLoading();
+  const t1 = setTimeout(() => setStep('s-geo','active'), 0);
+  const t2 = setTimeout(() => { setStep('s-geo','done'); setStep('s-rt','active'); }, 700);
+  const t3 = setTimeout(() => { setStep('s-rt','done');  setStep('s-osm','active'); }, 1500);
+  const t4 = setTimeout(() => { setStep('s-osm','done'); setStep('s-scr','active'); }, 2600);
+
+  try {
+    const body = { start, end };
+    const sEl = $('inp-start'), eEl = $('inp-end');
+    if (sEl.dataset.lat) { body.start_lat = parseFloat(sEl.dataset.lat); body.start_lng = parseFloat(sEl.dataset.lng); }
+    if (eEl.dataset.lat) { body.end_lat   = parseFloat(eEl.dataset.lat); body.end_lng   = parseFloat(eEl.dataset.lng); }
+
+    const res = await fetch('/api/route/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    [t1,t2,t3,t4].forEach(clearTimeout);
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `Chyba ${res.status}`); }
+    const data = await res.json();
+    ['s-geo','s-rt','s-osm','s-scr'].forEach(s => setStep(s,'done'));
+    initResults(data);
+  } catch (e) {
+    [t1,t2,t3,t4].forEach(clearTimeout);
+    showError(e.message || 'Neznámá chyba. Zkuste znovu.');
+  }
+}
+
+/* ── Init results ────────────────────────────────────────── */
+function initResults(d) {
+  currentData  = d;
+  currentAlts  = d.alternatives || [d];
+  currentAlts.sort((a, b) => b.safety_score - a.safety_score);
+  activeAltIdx = 0;
+
+  hideLoading();
+  renderAltTabs();
+  displayAlt(currentAlts[0]);
+  renderSharedMarkers();
+  renderGreenZones(d.green_zones);
+  renderCyclistPois(d.cyclist_pois);
+  renderRouteLayer(currentAlts[0]);
+  try { map.fitBounds(routeBounds(currentAlts[0]), { padding:[36,36] }); } catch(_) {}
+  $('legend').classList.add('on');
+  $('results').classList.add('on');
+  $('err').classList.remove('on');
+  saveRecent(currentAlts[0]);
+}
+
+/* ── Alt tabs ────────────────────────────────────────────── */
+function renderAltTabs() {
+  const section = $('alt-section'), tabs = $('alt-tabs');
+  if (currentAlts.length <= 1) { section.classList.remove('on'); $('alt-comparison').style.display='none'; return; }
+  section.classList.add('on');
+  tabs.innerHTML = '';
+
+  // Show comparison message
+  const best = currentAlts[0].safety_score;
+  const worst = currentAlts[currentAlts.length - 1].safety_score;
+  const diff = best - worst;
+  const cmp = $('alt-comparison');
+  if (diff > 0) {
+    cmp.innerHTML = `✅ Doporučená trasa je o <b>${diff} bodů</b> bezpečnější než nejrychlejší varianta`;
+    cmp.style.display = 'flex';
+  } else {
+    cmp.style.display = 'none';
+  }
+  currentAlts.forEach((alt, i) => {
+    const c     = scoreColor(alt.safety_score);
+    const label = i === 0 ? '★ Nejlepší' : `Varianta ${i+1}`;
+    const btn   = document.createElement('button');
+    btn.className = 'alt-tab' + (i === 0 ? ' active' : '');
+    btn.id        = `alt-tab-${i}`;
+    btn.onclick   = () => switchAlt(i);
+    btn.innerHTML = `
+      <div class="alt-lbl">${label}</div>
+      <div class="alt-score" style="color:${c}">${alt.safety_score}</div>
+      <div class="alt-meta">${alt.distance_km?.toFixed(1)} km · ${alt.duration_min} min</div>`;
+    tabs.appendChild(btn);
+  });
+}
+
+function switchAlt(idx) {
+  if (idx === activeAltIdx) return;
+  activeAltIdx = idx;
+  currentAlts.forEach((_, i) => {
+    const t = $(`alt-tab-${i}`);
+    if (t) t.className = 'alt-tab' + (i === idx ? ' active' : '');
+  });
+  const alt = currentAlts[idx];
+  displayAlt(alt);
+  clearRouteOnly();
+  renderRouteLayer(alt);
+  try { map.fitBounds(routeBounds(alt), { padding:[36,36], animate:true }); } catch(_) {}
+}
+
+/* ── Display alt ─────────────────────────────────────────── */
+function displayAlt(alt) {
+  const s = alt.safety_score, c = scoreColor(s), g = scoreGlow(s);
+
+  // Score ring animate
+  const circ = Math.round((1 - s/100) * 238.76);
+  const fill = $('ring-fill');
+  fill.style.strokeDashoffset = 238.76; // reset
+  fill.style.stroke = c;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    fill.style.strokeDashoffset = circ;
+  }));
+
+  // Score number counter
+  const numEl = $('ring-num');
+  numEl.style.color = c;
+  animateCount(numEl, s);
+
+  // Hero glow
+  $('score-hero').style.setProperty('--score-glow', g);
+
+  $('verdict').textContent = scoreVerdict(s);
+  $('verdict').style.color = c;
+  $('m-dist').textContent  = alt.distance_km  ? alt.distance_km.toFixed(1) + ' km' : '–';
+  $('m-time').textContent  = alt.duration_min ? alt.duration_min + ' min' : '–';
+
+  const bd = alt.score_breakdown || {};
+  setBar('b-bike',  bd.bike_path_coverage);
+  setBar('b-acc',   bd.accident_density);
+  setBar('b-green', bd.green_zone_coverage);
+
+  const hl = $('hl-list'); hl.innerHTML = '';
+  (alt.highlights || []).forEach(h => {
+    hl.insertAdjacentHTML('beforeend',
+      `<div class="hl"><span class="hl-icon">${hlIcon(h)}</span><span class="hl-text">${h}</span></div>`);
+  });
+
+  $('btn-pdf').href = `/api/route/${alt.id}/pdf/`;
+  $('btn-gpx').href = `/api/route/${alt.id}/gpx/`;
+
+  // New feature blocks
+  drawElevation(alt);
+  drawSurface(alt);
+  showTips(alt);
+}
+
+/* ── Segment colours ─────────────────────────────────────── */
+const SEG_COLOR = { bike:'#22C55E', neutral:'#00D4AA', busy:'#F0A030' };
+
+/* ── Draw route with animation ───────────────────────────── */
+function renderRouteLayer(alt) {
+  const coords = alt.route_geojson?.geometry?.coordinates;
+  if (!coords || coords.length < 2) return;
+  const allPts = coords.map(c => [c[1], c[0]]);
+  const segs   = alt.road_segments || [];
+
+  if (segs.length > 1) {
+    // Shadow underline
+    const shadow = L.polyline(allPts, { color:'#000', weight:10, opacity:.35, lineCap:'round' });
+    shadow.addTo(map); routeLayers.push(shadow);
+
+    segs.forEach(seg => {
+      if (!seg.coords || seg.coords.length < 2) return;
+      const pts   = seg.coords.map(c => [c[1], c[0]]);
+      const color = SEG_COLOR[seg.category] || SEG_COLOR.neutral;
+      const w     = seg.category === 'bike' ? 6 : 4;
+      const glow  = L.polyline(pts, { color, weight:w+10, opacity:.10, lineCap:'round' });
+      const line  = L.polyline(pts, { color, weight:w,    opacity:.92, lineCap:'round', lineJoin:'round' });
+      glow.addTo(map); routeLayers.push(glow);
+      line.addTo(map); routeLayers.push(line);
+    });
+  } else {
+    const c    = scoreColor(alt.safety_score);
+    const glow = L.polyline(allPts, { color:c, weight:14, opacity:.10 });
+    const line = L.polyline(allPts, { color:c, weight:4.5, opacity:.92, lineCap:'round', lineJoin:'round' });
+    glow.addTo(map); routeLayers.push(glow);
+    line.addTo(map); routeLayers.push(line);
+  }
+}
+
+/* ── Pulsing marker ──────────────────────────────────────── */
+function pulseIcon(color, emoji) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="position:relative;display:flex;align-items:center;justify-content:center;width:32px;height:32px">
+      <div style="position:absolute;width:32px;height:32px;border-radius:50%;border:2px solid ${color};animation:pulseRing 2s ease-out infinite;opacity:.7"></div>
+      <div style="width:20px;height:20px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:10px;border:2px solid rgba(255,255,255,.5);box-shadow:0 0 16px ${color}99,0 2px 8px rgba(0,0,0,.6);z-index:1">${emoji}</div>
+    </div>`,
+    iconSize: [32,32], iconAnchor: [16,16],
+  });
+}
+
+function pinLabel(color, text) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 3px 8px rgba(0,0,0,.6))">
+      <div style="background:${color};color:#030f0b;font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:8px;white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;font-family:'Plus Jakarta Sans',sans-serif">${text}</div>
+      <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid ${color}"></div>
+    </div>`,
+    iconSize:[0,0], iconAnchor:[0,0],
+  });
+}
+
+/* ── Shared markers ──────────────────────────────────────── */
+function renderSharedMarkers() {
+  const d = currentData;
+
+  // Accident dots
+  (d.accident_points || []).forEach(a => {
+    const m = L.circleMarker([a.lat, a.lng], {
+      radius:5, fillColor:'#FF8C00', color:'rgba(255,255,255,.45)', weight:1.5, fillOpacity:.9
+    });
+    if (a.date || a.severity) m.bindPopup(
+      `<div style="font-size:12px;line-height:1.7"><b style="color:#FF8C00">⚠️ Nehoda s cyklistou</b><br>
+       ${a.severity ? 'Závažnost: '+a.severity+'<br>' : ''}${a.date ? 'Datum: '+a.date : ''}</div>`);
+    m.addTo(map); sharedLayers.push(m);
+  });
+
+  const alt = currentAlts[0];
+  const start = alt.start || d.start;
+  const end   = alt.end   || d.end;
+
+  if (start?.lat) {
+    const addr = (start.address || 'Start').split(',')[0];
+    const dot  = L.marker([start.lat, start.lng], { icon:pulseIcon('#00D4AA','▶'), zIndexOffset:2000 });
+    const lbl  = L.marker([start.lat, start.lng], { icon:pinLabel('#00D4AA', addr), zIndexOffset:2001 });
+    dot.addTo(map); lbl.addTo(map);
+    sharedLayers.push(dot, lbl);
+  }
+  if (end?.lat) {
+    const addr = (end.address || 'Cíl').split(',')[0];
+    const dot  = L.marker([end.lat, end.lng], { icon:pulseIcon('#FF5252','■'), zIndexOffset:2000 });
+    const lbl  = L.marker([end.lat, end.lng], { icon:pinLabel('#FF5252', addr), zIndexOffset:2001 });
+    dot.addTo(map); lbl.addTo(map);
+    sharedLayers.push(dot, lbl);
+  }
+}
+
+function routeBounds(alt) {
+  const coords = alt.route_geojson?.geometry?.coordinates || [];
+  return L.latLngBounds(coords.map(c => [c[1], c[0]]));
+}
+
+/* ── Green zones ─────────────────────────────────────────── */
+const _ZONE_LABELS = {
+  park:'Park', garden:'Zahrada', nature_reserve:'Přírodní rezervace',
+  forest:'Les', meadow:'Louka', wood:'Les', scrub:'Křoviny', heath:'Vřesoviště',
+};
+
+function renderGreenZones(zones) {
+  (zones || []).forEach(z => {
+    const ring = Array.isArray(z) ? z : z.coords;
+    if (!ring || ring.length < 3) return;
+    const latlngs = ring.map(c => [c[1], c[0]]);
+    const label = (z.name ? `<b>${z.name}</b><br>` : '') + (_ZONE_LABELS[z.zone_type] || 'Zelená zóna');
+    const poly = L.polygon(latlngs, {
+      color:'#22C55E', weight:1, fillColor:'#22C55E', fillOpacity:.10, opacity:.45,
+    }).bindTooltip(label, { sticky:true, className:'dark-tip' });
+    poly.addTo(map); sharedLayers.push(poly);
+  });
+}
+
+/* ── Cyclist POIs ────────────────────────────────────────── */
+const _POI_CFG = {
+  bike_shop: { color:'#E05252', icon:'🔧', label:'Veloservis' },
+  water:     { color:'#4A9ECD', icon:'💧', label:'Pitná voda' },
+  parking:   { color:'#8B949E', icon:'🅿',  label:'Parkování kol' },
+};
+
+function renderCyclistPois(pois) {
+  (pois || []).forEach(p => {
+    const c = _POI_CFG[p.type] || _POI_CFG.bike_shop;
+    const icon = L.divIcon({
+      className:'',
+      html:`<div style="background:${c.color};width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;border:2px solid rgba(255,255,255,.35);box-shadow:0 2px 10px rgba(0,0,0,.5);cursor:pointer">${c.icon}</div>`,
+      iconSize:[22,22], iconAnchor:[11,11],
+    });
+    const title = `<div style="font-size:12px;line-height:1.6">${p.name ? '<b>'+p.name+'</b><br>' : ''}${c.label}</div>`;
+    L.marker([p.lat, p.lng], {icon}).bindPopup(title).addTo(map);
+  });
+}
+
+/* ── Elevation mini-chart ────────────────────────────────── */
+let _elevState = null;   // cached state for hover interaction
+
+function _drawElevBase(ctx, W, H, prof, dists, eles, minD, maxD, minE, maxE, MT, ML, cw, ch, xy) {
+  ctx.clearRect(0, 0, W, H);
+  // Fill
+  ctx.beginPath();
+  const [x0, y0] = xy(dists[0], eles[0]);
+  ctx.moveTo(x0, MT + ch);
+  prof.forEach(p => { const [x,y] = xy(p[0], p[1]); ctx.lineTo(x, y); });
+  ctx.lineTo(xy(dists[dists.length-1], minE)[0], MT + ch);
+  ctx.closePath();
+  const grd = ctx.createLinearGradient(0, MT, 0, MT + ch);
+  grd.addColorStop(0, 'rgba(0,212,170,0.20)');
+  grd.addColorStop(1, 'rgba(0,212,170,0.02)');
+  ctx.fillStyle = grd;
+  ctx.fill();
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  prof.forEach(p => { const [x,y] = xy(p[0], p[1]); ctx.lineTo(x, y); });
+  ctx.strokeStyle = '#00D4AA';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function drawElevation(alt) {
+  const prof = alt.elevation_profile || [];
+  const coords = (alt.route_geojson && alt.route_geojson.geometry) ? alt.route_geojson.geometry.coordinates : [];
+  const card = $('elev-card');
+  if (prof.length < 3) { card.style.display = 'none'; _elevState = null; return; }
+  card.style.display = '';
+
+  const canvas = $('elev-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const dists = prof.map(p => p[0]), eles = prof.map(p => p[1]);
+  const minD = 0, maxD = Math.max(...dists);
+  const rawMin = Math.min(...eles), rawMax = Math.max(...eles);
+  const pad = Math.max((rawMax - rawMin) * 0.15, 3);
+  const minE = rawMin - pad, maxE = rawMax + pad;
+
+  const ML = 0, MR = 0, MT = 4, MB = 4;
+  const cw = W - ML - MR, ch = H - MT - MB;
+
+  function xy(d, e) {
+    return [ ML + (d - minD) / (maxD - minD) * cw,
+             MT + (1 - (e - minE) / (maxE - minE)) * ch ];
+  }
+
+  _drawElevBase(ctx, W, H, prof, dists, eles, minD, maxD, minE, maxE, MT, ML, cw, ch, xy);
+
+  // Stats
+  let asc = 0, desc = 0;
+  for (let i = 1; i < eles.length; i++) {
+    const d = eles[i] - eles[i-1];
+    if (d > 0) asc += d; else desc -= d;
+  }
+  $('elev-stats').innerHTML =
+    `<div class="elev-stat"><span class="up">↑ ${Math.round(asc)} m</span></div>` +
+    `<div class="elev-stat"><span class="down">↓ ${Math.round(desc)} m</span></div>` +
+    `<div class="elev-stat">Min ${Math.round(rawMin)} m · Max ${Math.round(rawMax)} m</div>`;
+
+  // Cache state for hover interaction
+  _elevState = { prof, coords, dists, eles, minD, maxD, minE, maxE, MT, ML, cw, ch, xy, W, H };
+
+  // Attach hover handlers (only once)
+  if (!canvas._elevBound) {
+    canvas._elevBound = true;
+    canvas.style.cursor = 'crosshair';
+
+    canvas.addEventListener('mousemove', function(e) {
+      if (!_elevState) return;
+      const s = _elevState;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = s.W / rect.width;
+      const canvasX = (e.clientX - rect.left) * scaleX;
+
+      // Find closest point by X position
+      let bestIdx = 0, bestDist = Infinity;
+      for (let i = 0; i < s.prof.length; i++) {
+        const [px] = s.xy(s.dists[i], s.eles[i]);
+        const dx = Math.abs(px - canvasX);
+        if (dx < bestDist) { bestDist = dx; bestIdx = i; }
+      }
+
+      // Redraw base chart + crosshair
+      const ctx = canvas.getContext('2d');
+      _drawElevBase(ctx, s.W, s.H, s.prof, s.dists, s.eles, s.minD, s.maxD, s.minE, s.maxE, s.MT, s.ML, s.cw, s.ch, s.xy);
+
+      const [cx, cy] = s.xy(s.dists[bestIdx], s.eles[bestIdx]);
+
+      // Vertical crosshair line
+      ctx.beginPath();
+      ctx.moveTo(cx, s.MT);
+      ctx.lineTo(cx, s.MT + s.ch);
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Dot on the curve
+      ctx.beginPath();
+      ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#00D4AA';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Label on canvas
+      const label = `${Math.round(s.eles[bestIdx])} m  ·  ${s.dists[bestIdx].toFixed(1)} km`;
+      ctx.font = '600 11px -apple-system, BlinkMacSystemFont, sans-serif';
+      const tw = ctx.measureText(label).width + 10;
+      let lx = cx + 8;
+      if (lx + tw > s.W) lx = cx - tw - 4;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.roundRect(lx, cy - 18, tw, 20, 4);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, lx + 5, cy - 3);
+
+      // Show marker on map at corresponding route coordinate
+      if (s.coords.length > bestIdx) {
+        const c = s.coords[bestIdx];
+        const lat = c[1], lng = c[0];
+        const ele = Math.round(s.eles[bestIdx]);
+        if (elevMarker) { map.removeLayer(elevMarker); }
+        elevMarker = L.circleMarker([lat, lng], {
+          radius: 7, color: '#fff', weight: 2,
+          fillColor: '#00D4AA', fillOpacity: 1,
+        }).bindTooltip(`${ele} m`, {
+          permanent: true, direction: 'top', offset: [0, -10],
+          className: 'elev-tooltip'
+        }).addTo(map);
+      }
+    });
+
+    canvas.addEventListener('mouseleave', function() {
+      if (!_elevState) return;
+      const s = _elevState;
+      const ctx = canvas.getContext('2d');
+      _drawElevBase(ctx, s.W, s.H, s.prof, s.dists, s.eles, s.minD, s.maxD, s.minE, s.maxE, s.MT, s.ML, s.cw, s.ch, s.xy);
+      if (elevMarker) { map.removeLayer(elevMarker); elevMarker = null; }
+    });
+  }
+}
+
+/* ── Surface composition bar ────────────────────────────── */
+function drawSurface(alt) {
+  const segs = alt.road_segments || [];
+  const card = $('surface-card');
+  if (segs.length < 2) { card.style.display = 'none'; return; }
+  card.style.display = '';
+
+  // Calculate km per category
+  function segLen(coords) {
+    let t = 0;
+    for (let i = 1; i < coords.length; i++) {
+      const dx = (coords[i][0] - coords[i-1][0]) * 111.32;
+      const dy = (coords[i][1] - coords[i-1][1]) * 111.32;
+      t += Math.sqrt(dx*dx + dy*dy);
+    }
+    return t;
+  }
+  let bike = 0, neutral = 0, busy = 0;
+  segs.forEach(s => {
+    const km = segLen(s.coords);
+    if (s.category === 'bike') bike += km;
+    else if (s.category === 'busy') busy += km;
+    else neutral += km;
+  });
+  const total = bike + neutral + busy || 1;
+
+  const bp = Math.round(bike / total * 100);
+  const np = Math.round(neutral / total * 100);
+  const bup = 100 - bp - np;
+
+  $('surface-bar').innerHTML =
+    (bp > 0  ? `<div style="width:${bp}%;background:#22C55E"></div>` : '') +
+    (np > 0  ? `<div style="width:${np}%;background:#00D4AA"></div>` : '') +
+    (bup > 0 ? `<div style="width:${bup}%;background:#F0A030"></div>` : '');
+
+  $('surface-legend').innerHTML =
+    `<div class="surface-legend-item"><div class="surface-legend-dot" style="background:#22C55E"></div>Cyklostezka <span class="surface-legend-val">${bp}%</span></div>` +
+    `<div class="surface-legend-item"><div class="surface-legend-dot" style="background:#00D4AA"></div>Klidná <span class="surface-legend-val">${np}%</span></div>` +
+    `<div class="surface-legend-item"><div class="surface-legend-dot" style="background:#F0A030"></div>Frekventovaná <span class="surface-legend-val">${bup}%</span></div>`;
+}
+
+/* ── Safety tips ─────────────────────────────────────────── */
+function showTips(alt) {
+  const tips = [];
+  const bd = alt.score_breakdown || {};
+  const segs = alt.road_segments || [];
+  const score = alt.safety_score;
+
+  // Busy road segments
+  const busySegs = segs.filter(s => s.category === 'busy');
+  if (busySegs.length > 2) {
+    tips.push({ icon: '🚗', text: `Trasa obsahuje ${busySegs.length} úseků frekventovaných silnic - buďte obzvlášť opatrní a používejte reflexní vestu` });
+  }
+
+  // Low accident score
+  if (bd.accident_density != null && bd.accident_density < 50) {
+    tips.push({ icon: '⚠️', text: 'V okolí trasy bylo zaznamenáno více nehod - doporučujeme helmu a zvýšenou pozornost' });
+  }
+
+  // Time-of-day
+  const hour = new Date().getHours();
+  if (hour >= 20 || hour < 6) {
+    tips.push({ icon: '🌙', text: 'Jezdíte v noci - použijte přední i zadní světlo a reflexní prvky' });
+  } else if (hour >= 7 && hour <= 9) {
+    tips.push({ icon: '🏢', text: 'Ranní špička - na frekventovaných úsecích očekávejte zvýšený provoz' });
+  } else if (hour >= 15 && hour <= 17) {
+    tips.push({ icon: '🏢', text: 'Odpolední špička - buďte opatrní na křižovatkách a sdílených komunikacích' });
+  }
+
+  // Good score
+  if (score >= 75) {
+    tips.push({ icon: '✅', text: 'Skvělá volba! Tato trasa patří mezi nejbezpečnější v Ostravě' });
+  }
+
+  // Green zones
+  if (bd.green_zone_coverage && bd.green_zone_coverage >= 70) {
+    tips.push({ icon: '🌳', text: 'Příjemná trasa - velká část vede zelenými oblastmi' });
+  }
+
+  // Elevation warning
+  const elev = alt.elevation_profile || [];
+  if (elev.length > 1) {
+    let asc = 0;
+    for (let i = 1; i < elev.length; i++) { const d = elev[i][1] - elev[i-1][1]; if (d > 0) asc += d; }
+    if (asc > 100) tips.push({ icon: '⛰️', text: `Celkové stoupání ${Math.round(asc)} m - nezapomeňte na dostatek vody` });
+  }
+
+  const card = $('tips-card');
+  if (tips.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  $('tips-list').innerHTML = tips.map(t =>
+    `<div class="tip"><span class="tip-icon">${t.icon}</span><span>${t.text}</span></div>`
+  ).join('');
+}
+
+/* ── Recent routes (localStorage) ────────────────────────── */
+function saveRecent(alt) {
+  try {
+    const key = 'bikeostrava_recent';
+    let history = JSON.parse(localStorage.getItem(key) || '[]');
+    const entry = {
+      id: alt.id,
+      start: (alt.start?.address || '').split(',')[0],
+      end: (alt.end?.address || '').split(',')[0],
+      score: alt.safety_score,
+      dist: alt.distance_km,
+      time: alt.duration_min,
+      ts: Date.now(),
+    };
+    // Don't add duplicates
+    history = history.filter(h => h.id !== entry.id);
+    history.unshift(entry);
+    history = history.slice(0, 5);
+    localStorage.setItem(key, JSON.stringify(history));
+    renderRecent();
+  } catch(_) {}
+}
+
+function renderRecent() {
+  try {
+    const history = JSON.parse(localStorage.getItem('bikeostrava_recent') || '[]');
+    const section = $('recent-section');
+    if (history.length === 0) { section.style.display = 'none'; return; }
+    section.style.display = '';
+    $('recent-list').innerHTML = history.map(h => `
+      <div class="recent-item" onclick="location.href='/?route=${h.id}'">
+        <div class="recent-score" style="color:${scoreColor(h.score)}">${h.score}</div>
+        <div class="recent-route">
+          <div class="recent-addrs">${h.start} → ${h.end}</div>
+          <div class="recent-meta">${h.dist?.toFixed(1) || '?'} km · ${h.time || '?'} min</div>
+        </div>
+        <div class="recent-arrow">›</div>
+      </div>`).join('');
+  } catch(_) {}
+}
+
+// Show recent on load
+renderRecent();
+
+/* ── Share ───────────────────────────────────────────────── */
+function shareRoute() {
+  const alt = currentAlts[activeAltIdx];
+  if (!alt) return;
+  const url  = `${location.origin}/?route=${alt.id}`;
+  const btn  = $('btn-share');
+  const orig = btn.innerHTML;
+  const fb   = () => { try { prompt('Zkopírujte odkaz:', url); } catch(_){} };
+  if (!navigator.clipboard) { fb(); return; }
+  navigator.clipboard.writeText(url).then(() => {
+    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Zkopírováno!`;
+    btn.classList.add('copied');
+    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 2000);
+  }).catch(fb);
+}
+
+/* ── Enter key ───────────────────────────────────────────── */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && ['inp-start','inp-end'].includes(document.activeElement?.id)) doRoute();
+});
+
+/* ── Input: clear saved coords on manual edit ────────────── */
+$('inp-start').addEventListener('input', () => { delete $('inp-start').dataset.lat; delete $('inp-start').dataset.lng; });
+$('inp-end').addEventListener('input',   () => { delete $('inp-end').dataset.lat;   delete $('inp-end').dataset.lng; });
+
+/* ── Map click → pick start/end ─────────────────────────── */
+window._mapPickStart = function(addr, lat, lng) {
+  const el = $('inp-start'); el.value = addr; el.dataset.lat = lat; el.dataset.lng = lng; map.closePopup();
+  if (pickStartMarker) map.removeLayer(pickStartMarker);
+  pickStartMarker = L.marker([lat, lng], { icon: pulseIcon('#00D4AA', '▶'), zIndexOffset: 1500 }).addTo(map);
+};
+window._mapPickEnd = function(addr, lat, lng) {
+  const el = $('inp-end'); el.value = addr; el.dataset.lat = lat; el.dataset.lng = lng; map.closePopup();
+  if (pickEndMarker) map.removeLayer(pickEndMarker);
+  pickEndMarker = L.marker([lat, lng], { icon: pulseIcon('#FF5252', '■'), zIndexOffset: 1500 }).addTo(map);
+};
+
+map.on('click', async function(e) {
+  if (e.originalEvent._stopped) return;
+  const { lat, lng } = e.latlng;
+  let address = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  try {
+    const r = await fetch(`https://photon.komoot.io/reverse?lon=${lng}&lat=${lat}`);
+    const data = await r.json();
+    const f = data?.features?.[0];
+    if (f) {
+      const p = f.properties;
+      const parts = [p.name, p.street, p.housenumber, p.city||p.town||p.village].filter(Boolean);
+      if (parts.length) address = parts.join(', ');
+    }
+  } catch(_) {}
+  const addrEsc = address.replace(/'/g, "\\'");
+  L.popup({ closeButton:true })
+    .setLatLng([lat, lng])
+    .setContent(`
+      <div class="map-pick-label">${address}</div>
+      <div class="map-pick-popup">
+        <button class="map-pick-btn" onclick="window._mapPickStart('${addrEsc}',${lat},${lng})">📍 Odkud</button>
+        <button class="map-pick-btn" onclick="window._mapPickEnd('${addrEsc}',${lat},${lng})">🏁 Kam</button>
+      </div>`)
+    .openOn(map);
+});
+
+/* ── ?route= URL handler ─────────────────────────────────── */
+(async function() {
+  const routeId = new URLSearchParams(window.location.search).get('route');
+  if (!routeId) return;
+  try {
+    const r = await fetch(`/api/route/${routeId}/`);
+    if (!r.ok) return;
+    const data = await r.json();
+    $('inp-start').value = data.start?.address || '';
+    $('inp-end').value   = data.end?.address   || '';
+    initResults(data);
+  } catch(_) {}
+})();
+
+/* ── Weather & AQI ───────────────────────────────────────── */
+(async function() {
+  try {
+    const [wRes, aqiRes] = await Promise.all([
+      fetch('https://api.open-meteo.com/v1/forecast?latitude=49.8209&longitude=18.2625&current=temperature_2m,wind_speed_10m,weather_code&wind_speed_unit=kmh'),
+      fetch('https://air-quality-api.open-meteo.com/v1/air-quality?latitude=49.8209&longitude=18.2625&current=european_aqi'),
+    ]);
+    const wData = await wRes.json(), aqiData = await aqiRes.json();
+    const cur = wData.current || {};
+    const wCodes = {0:'☀️',1:'🌤',2:'⛅',3:'☁️',45:'🌫',48:'🌫',51:'🌦',53:'🌧',55:'🌧',61:'🌧',63:'🌧',65:'🌧',71:'❄️',73:'❄️',75:'❄️',80:'🌦',81:'🌧',82:'⛈',95:'⛈'};
+    const code = cur.weather_code || 0;
+    if (cur.temperature_2m != null) $('w-temp').textContent = Math.round(cur.temperature_2m) + '°C';
+    if (cur.wind_speed_10m != null) $('w-wind').textContent = Math.round(cur.wind_speed_10m) + ' km/h';
+    $('w-icon').textContent = wCodes[code] || '☀️';
+
+    // Cycling-specific weather warning
+    const rainCodes = new Set([51,53,55,61,63,65,80,81,82,95,96,99]);
+    const snowCodes = new Set([71,73,75,77,66,67]);
+    const wind = cur.wind_speed_10m || 0;
+    const warn = $('weather-warn');
+    if (snowCodes.has(code)) {
+      warn.className = 'weather-warn snow show';
+      warn.textContent = '🧊 Sníh nebo náledí - jízda na kole je nebezpečná';
+    } else if (rainCodes.has(code)) {
+      warn.className = 'weather-warn rain show';
+      warn.textContent = '🌧 Mokrý povrch - zvýšené riziko pádu, jeďte opatrně';
+    } else if (wind > 35) {
+      warn.className = 'weather-warn wind show';
+      warn.textContent = `💨 Silný vítr ${Math.round(wind)} km/h - může být obtížné řídit`;
+    }
+
+    const aqi = aqiData.current?.european_aqi;
+    if (aqi != null) {
+      const el = $('w-aqi');
+      el.textContent  = aqi<=20?'Výborná':aqi<=40?'Dobrá':aqi<=60?'Střední':aqi<=80?'Špatná':'Kritická';
+      el.style.background = aqi<=20?'#16803c':aqi<=40?'#4d7c0f':aqi<=60?'#a16207':aqi<=80?'#b45309':'#b91c1c';
+    }
+    $('weather-strip').classList.add('visible');
+  } catch(_) {}
+})();
+
+/* ── Ostrava boundary ────────────────────────────────────── */
+(async function() {
+  try {
+    const r = await fetch(
+      'https://nominatim.openstreetmap.org/search?city=Ostrava&country=Czech+Republic&format=geojson&limit=1&polygon_geojson=1',
+      { headers:{'Accept-Language':'cs','User-Agent':'BikeOstrava/1.0'} }
+    );
+    const data = await r.json();
+    const feature = data.features?.[0];
+    if (!feature?.geometry) return;
+    L.geoJSON(feature, { style:{ color:'#00D4AA', weight:1.5, dashArray:'10,8', fill:false, opacity:0.25 } }).addTo(map);
+  } catch(_) {}
+})();
+
+/* ── Mobile bottom sheet ─────────────────────────────────── */
+const isMobile = () => window.innerWidth <= 720;
+let sheetState = 'half'; // peek | half | full
+
+function setSheet(state) {
+  sheetState = state;
+  const sb = $('sidebar');
+  sb.classList.remove('peek','half','full');
+  sb.classList.add(state);
+  // Let map know about size change
+  setTimeout(() => map.invalidateSize(), 400);
+}
+
+function toggleSheet() {
+  if (sheetState === 'peek') setSheet('half');
+  else if (sheetState === 'half') setSheet('peek');
+  else setSheet('half');
+  // Update button text
+  const btn = $('mobile-map-toggle');
+  if (sheetState === 'peek') btn.innerHTML = '📋 Trasa';
+  else btn.innerHTML = '🗺 Mapa';
+}
+
+// Handle bar: tap to cycle through states
+$('mobile-handle').addEventListener('click', () => {
+  if (sheetState === 'peek') setSheet('half');
+  else if (sheetState === 'half') setSheet('full');
+  else setSheet('peek');
+  const btn = $('mobile-map-toggle');
+  if (sheetState === 'peek') btn.innerHTML = '📋 Trasa';
+  else btn.innerHTML = '🗺 Mapa';
+});
+
+// Touch drag on handle
+let _touchY = 0;
+$('mobile-handle').addEventListener('touchstart', e => {
+  _touchY = e.touches[0].clientY;
+}, { passive: true });
+$('mobile-handle').addEventListener('touchend', e => {
+  const dy = e.changedTouches[0].clientY - _touchY;
+  if (Math.abs(dy) < 20) return; // too small - let click handle it
+  e.preventDefault();
+  if (dy < -30) {
+    // Swipe up
+    if (sheetState === 'peek') setSheet('half');
+    else setSheet('full');
+  } else if (dy > 30) {
+    // Swipe down
+    if (sheetState === 'full') setSheet('half');
+    else setSheet('peek');
+  }
+  const btn = $('mobile-map-toggle');
+  if (sheetState === 'peek') btn.innerHTML = '📋 Trasa';
+  else btn.innerHTML = '🗺 Mapa';
+});
+
+// After results load on mobile - auto-expand to half
+const _origInitResults = initResults;
+initResults = function(d) {
+  _origInitResults(d);
+  if (isMobile()) setSheet('half');
+};
+
+// On load - set initial state
+if (isMobile()) setSheet('half');
+</script>
+</body>
+</html>
