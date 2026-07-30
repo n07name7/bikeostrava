@@ -21,6 +21,7 @@ def _overpass_query(ql: str) -> dict:
         response = requests.post(
             settings.OVERPASS_API_URL,
             data={"data": ql},
+            headers={"User-Agent": "BikeOstrava/1.0 (Contact: admin@bikeostrava.cz)"},
             timeout=15,
         )
         response.raise_for_status()
