@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 class Command(BaseCommand):
     help = "Load accident data from pre-fetched accidents.json"
 
+    def add_arguments(self, parser):
+        parser.add_argument("--months", type=int, default=24)
+        parser.add_argument("--clear", action="store_true")
+
     def handle(self, *args, **options):
         # Clear existing
         count = AccidentPoint.objects.count()
