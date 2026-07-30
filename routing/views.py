@@ -18,7 +18,7 @@ from django_ratelimit.decorators import ratelimit
 
 from routing.models import RouteCache, SavedRoute
 from routing.services.geocoder import geocode
-from routing.services.overpass import get_green_zones, get_cyclist_pois
+from routing.services.overpass import get_map_context
 from routing.services.router import get_route
 from routing.services.accidents import count_accidents_near_route, get_accidents_near_route
 from routing.services.scorer import compute_safety_score
@@ -112,30 +112,22 @@ def compute_route(request):
     except ValueError as exc:
         return Response({'error': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-    # --- Green zones, accident points and POIs - fetched in parallel ---
+    # --- Green zones, accident points and POIs - fetched in parallel (mostly) ---
     primary_coords = route_results[0]['coordinates']
 
-    def _fetch_green_zones():
+    def _fetch_map_context():
         try:
-            return get_green_zones(primary_coords)
+            return get_map_context(primary_coords)
         except Exception as exc:
-            logger.warning("Green zones fetch failed: %s", exc)
-            return []
+            logger.warning("Map context fetch failed: %s", exc)
+            return [], []
 
-    def _fetch_cyclist_pois():
-        try:
-            return get_cyclist_pois(primary_coords)
-        except Exception as exc:
-            logger.warning("Cyclist POIs fetch failed: %s", exc)
-            return []
-
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        f_green    = pool.submit(_fetch_green_zones)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_context   = pool.submit(_fetch_map_context)
         f_accidents = pool.submit(get_accidents_near_route, primary_coords)
-        f_pois     = pool.submit(_fetch_cyclist_pois)
-        green_zones     = f_green.result()
+        
+        green_zones, cyclist_pois = f_context.result()
         accident_points = f_accidents.result()
-        cyclist_pois    = f_pois.result()
 
     # --- Score + persist each alternative ---
     alternatives = []

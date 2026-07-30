@@ -79,35 +79,38 @@ out geom;
     return paths
 
 
-def get_green_zones(route_coords: list) -> list:
+def get_map_context(route_coords: list) -> tuple[list, list]:
     """
-    Return green-zone polygon geometries near the route.
-    Each item: {"coords": [[lng, lat], ...], "name": str, "zone_type": str}
-
-    Queries OSM landuse / leisure tags:
-    - leisure=park, leisure=garden, leisure=nature_reserve
-    - landuse=forest, landuse=grass, landuse=meadow
-    - natural=wood, natural=scrub
+    Return both green-zone polygons and cyclist POIs in a single Overpass request.
+    This avoids HTTP 429 errors from parallel requests.
+    Returns (green_zones, pois).
     """
     lat_min, lng_min, lat_max, lng_max = _route_bbox(route_coords, padding_deg=0.005)
     bbox_str = f"{lat_min},{lng_min},{lat_max},{lng_max}"
 
     ql = f"""
-[out:json][timeout:10];
+[out:json][timeout:15];
 (
   way["leisure"~"park|nature_reserve"]({bbox_str});
   way["landuse"~"forest|meadow"]({bbox_str});
   way["natural"~"wood|scrub|heath"]({bbox_str});
+  node["shop"="bicycle"]({bbox_str});
+  node["amenity"="bicycle_repair_station"]({bbox_str});
+  node["amenity"="drinking_water"]({bbox_str});
 );
 out geom;
 """
     data = _overpass_query(ql)
     zones = []
-    for element in data.get("elements", []):
-        if element.get("type") == "way" and "geometry" in element:
-            coords = [[pt["lon"], pt["lat"]] for pt in element["geometry"]]
+    pois = []
+    
+    for el in data.get("elements", []):
+        el_type = el.get("type")
+        tags = el.get("tags", {})
+        
+        if el_type == "way" and "geometry" in el:
+            coords = [[pt["lon"], pt["lat"]] for pt in el["geometry"]]
             if len(coords) >= 3:
-                tags = element.get("tags", {})
                 zones.append({
                     "coords": coords,
                     "name": tags.get("name", ""),
@@ -118,44 +121,21 @@ out geom;
                         "green"
                     ),
                 })
-    return zones
-
-
-def get_cyclist_pois(route_coords: list) -> list:
-    """
-    Return cyclist POIs near the route: bike shops, drinking water, bike parking.
-    Each item: {"lat": float, "lng": float, "type": str, "name": str}
-    """
-    lat_min, lng_min, lat_max, lng_max = _route_bbox(route_coords, padding_deg=0.005)
-    bbox_str = f"{lat_min},{lng_min},{lat_max},{lng_max}"
-
-    ql = f"""
-[out:json][timeout:10];
-(
-  node["shop"="bicycle"]({bbox_str});
-  node["amenity"="bicycle_repair_station"]({bbox_str});
-  node["amenity"="drinking_water"]({bbox_str});
-);
-out body;
-"""
-    data = _overpass_query(ql)
-    pois = []
-    for el in data.get("elements", []):
-        if el.get("type") != "node":
-            continue
-        tags = el.get("tags", {})
-        amenity = tags.get("amenity", "")
-        shop    = tags.get("shop", "")
-        if shop == "bicycle" or amenity == "bicycle_repair_station":
-            poi_type = "bike_shop"
-        elif amenity == "drinking_water":
-            poi_type = "water"
-        else:
-            continue
-        pois.append({
-            "lat":  el["lat"],
-            "lng":  el["lon"],
-            "type": poi_type,
-            "name": tags.get("name", ""),
-        })
-    return pois
+        elif el_type == "node":
+            amenity = tags.get("amenity", "")
+            shop = tags.get("shop", "")
+            if shop == "bicycle" or amenity == "bicycle_repair_station":
+                poi_type = "bike_shop"
+            elif amenity == "drinking_water":
+                poi_type = "water"
+            else:
+                continue
+                
+            pois.append({
+                "lat":  el["lat"],
+                "lng":  el["lon"],
+                "type": poi_type,
+                "name": tags.get("name", ""),
+            })
+            
+    return zones, pois

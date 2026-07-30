@@ -97,6 +97,7 @@ def _graphhopper_cloud(start_lat, start_lng, end_lat, end_lng) -> list[dict]:
         "points_encoded":  False,
         "instructions":    True,
         "elevation":       True,
+        "details":         ["road_class", "surface"],
         "algorithm":                           "alternative_route",
         "alternative_route.max_paths":         3,
         "alternative_route.max_weight_factor": 1.4,
