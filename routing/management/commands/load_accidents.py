@@ -23,7 +23,6 @@ from html.parser import HTMLParser
 
 import rarfile
 import requests
-from django.contrib.gis.geos import Point
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from pyproj import Transformer
@@ -228,7 +227,8 @@ class Command(BaseCommand):
         for r in records:
             try:
                 points.append(AccidentPoint(
-                    location=Point(float(r["lng"]), float(r["lat"]), srid=4326),
+                    latitude=float(r["lat"]),
+                    longitude=float(r["lng"]),
                     date=r.get("date"),
                     severity=r.get("severity", ""),
                 ))

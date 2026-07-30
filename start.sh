@@ -50,7 +50,7 @@ if curl -sf "http://localhost:$GH_PORT/health" > /dev/null 2>&1; then
 elif [ -f "graphhopper/graphhopper-web.jar" ] && ls graphhopper/*.osm.pbf >/dev/null 2>&1; then
     info "Starting GraphHopper…"
     cd graphhopper
-    java -Xmx512m -Xms256m \
+    java -Xmx2g -Xms512m \
         -jar graphhopper-web.jar \
         server config.yml \
         > "$LOG_DIR/graphhopper.log" 2>&1 &
@@ -78,7 +78,7 @@ info "Checking migrations…"
 $PYTHON manage.py migrate --noinput -v 0 > /dev/null 2>&1 && ok "Migrations up to date"
 
 # ── 3. Accident data - auto-refresh every 35 days ────────────────────────────
-ACCIDENT_STAMP="$LOG_DIR/accidents_loaded"
+ACCIDENT_STAMP=".accidents_loaded"
 COUNT=$($PYTHON -c "
 import os, django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE','bikeostrava.settings')

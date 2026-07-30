@@ -66,8 +66,12 @@ def compute_route(request):
         end_normalized=cache_key_end,
     ).first()
     if cached:
-        logger.info("Cache hit: %s → %s", start_raw, end_raw)
-        return Response(cached.result_json)
+        if cached.is_expired():
+            cached.delete()
+            logger.info("Cache expired: %s → %s", start_raw, end_raw)
+        else:
+            logger.info("Cache hit: %s → %s", start_raw, end_raw)
+            return Response(cached.result_json)
 
     # --- Geocode (or use pre-resolved coords from map click) ---
     try:

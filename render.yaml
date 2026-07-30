@@ -1,0 +1,30 @@
+# https://render.com/docs/blueprint-spec
+databases:
+  - name: bikeostrava-db
+    plan: free
+    databaseName: bikeostrava
+    region: frankfurt
+
+services:
+  - type: web
+    name: bikeostrava
+    plan: free
+    runtime: python
+    region: frankfurt
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn bikeostrava.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bikeostrava-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: GRAPHHOPPER_API_KEY
+        sync: false  # set manually in Render dashboard
+      - key: GRAPHHOPPER_API_URL
+        value: "https://graphhopper.com/api/1/route"

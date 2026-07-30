@@ -1,17 +1,28 @@
 import os
 from pathlib import Path
+import dj_database_url
 from decouple import config, Csv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-me-in-production-bikeostrava-2024')
+SECRET_KEY = config('SECRET_KEY')
 
 DEBUG = config('DEBUG', default=False, cast=bool)
+
+# Production security headers (only when DEBUG=False)
+if not DEBUG:
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    X_FRAME_OPTIONS = 'DENY'
 
 def _allowed_hosts():
     hosts = list(config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv()))
     # Allow Cloudflare Tunnel domains
     hosts.append('.trycloudflare.com')
+    # Allow Render domains
+    hosts.append('.onrender.com')
     # Always allow the auto-detected LAN IP so phones on the same network can connect
     import socket
     try:
@@ -34,7 +45,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django.contrib.gis',
     'rest_framework',
     'corsheaders',
     'django_ratelimit',
@@ -73,17 +83,25 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'bikeostrava.wsgi.application'
 
-# Database - PostGIS
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.contrib.gis.db.backends.postgis',
-        'NAME':     config('PGDATABASE', default='bikeostrava'),
-        'USER':     config('PGUSER',     default='postgres'),
-        'PASSWORD': config('PGPASSWORD', default='postgres'),
-        'HOST':     config('PGHOST',     default='localhost'),
-        'PORT':     config('PGPORT',     default='5432'),
+# Database
+if config('DATABASE_URL', default=''):
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=config('DATABASE_URL'),
+            conn_max_age=600,
+        )
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME':     config('PGDATABASE', default='bikeostrava'),
+            'USER':     config('PGUSER',     default='postgres'),
+            'PASSWORD': config('PGPASSWORD', default='postgres'),
+            'HOST':     config('PGHOST',     default='localhost'),
+            'PORT':     config('PGPORT',     default='5432'),
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -104,9 +122,9 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS - allow all origins in dev; tighten in prod via env
+# CORS
 CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='', cast=Csv())
-CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=True, cast=bool)
+CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all origins in dev mode
 
 # DRF
 REST_FRAMEWORK = {

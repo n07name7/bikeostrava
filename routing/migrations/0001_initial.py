@@ -1,8 +1,7 @@
-import uuid
-import django.contrib.gis.db.models.fields
-import django.db.models.deletion
-import django.utils.timezone
+# Generated migration — no PostGIS dependency
+
 from django.db import migrations, models
+import uuid
 
 
 class Migration(migrations.Migration):
@@ -17,12 +16,19 @@ class Migration(migrations.Migration):
             name='AccidentPoint',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('location', django.contrib.gis.db.models.fields.PointField(srid=4326)),
+                ('latitude', models.FloatField(db_index=True)),
+                ('longitude', models.FloatField(db_index=True)),
                 ('date', models.DateField(blank=True, null=True)),
                 ('severity', models.CharField(blank=True, max_length=50)),
                 ('description', models.TextField(blank=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
             ],
+            options={
+                'indexes': [
+                    models.Index(fields=['date'], name='routing_acc_date_idx'),
+                    models.Index(fields=['latitude', 'longitude'], name='routing_acc_latlng_idx'),
+                ],
+            },
         ),
         migrations.CreateModel(
             name='RouteCache',
@@ -33,6 +39,12 @@ class Migration(migrations.Migration):
                 ('result_json', models.JSONField()),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
             ],
+            options={
+                'unique_together': {('start_normalized', 'end_normalized')},
+                'indexes': [
+                    models.Index(fields=['created_at'], name='routing_rc_created_idx'),
+                ],
+            },
         ),
         migrations.CreateModel(
             name='SavedRoute',
@@ -53,17 +65,5 @@ class Migration(migrations.Migration):
             options={
                 'ordering': ['-created_at'],
             },
-        ),
-        migrations.AddIndex(
-            model_name='accidentpoint',
-            index=models.Index(fields=['date'], name='routing_acc_date_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='routecache',
-            index=models.Index(fields=['created_at'], name='routing_rou_created_idx'),
-        ),
-        migrations.AlterUniqueTogether(
-            name='routecache',
-            unique_together={('start_normalized', 'end_normalized')},
         ),
     ]

@@ -900,17 +900,17 @@
     <div class="route-inputs">
       <div class="input-row">
         <div class="input-dot"><div class="dot dot-start"></div></div>
-        <input id="inp-start" type="text" placeholder="Odkud…" autocomplete="off" />
+        <input id="inp-start" type="text" placeholder="Odkud…" aria-label="Výchozí bod" autocomplete="off" />
       </div>
       <div class="input-row">
         <div class="input-dot"><div class="dot dot-end"></div></div>
-        <input id="inp-end"   type="text" placeholder="Kam…"   autocomplete="off" />
+        <input id="inp-end"   type="text" placeholder="Kam…"   aria-label="Cíl cesty" autocomplete="off" />
       </div>
     </div>
 
-    <div class="weather-warn" id="weather-warn"></div>
+    <div class="weather-warn" id="weather-warn" role="alert" aria-live="polite"></div>
 
-    <button class="btn-go" id="btn-go" onclick="doRoute()">
+    <button class="btn-go" id="btn-go" onclick="doRoute()" aria-label="Najít bezpečnou trasu">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
       Najít nejbezpečnější trasu
     </button>
@@ -944,7 +944,7 @@
     </div>
 
     <!-- Error -->
-    <div class="error-box" id="err"></div>
+    <div class="error-box" id="err" role="alert" aria-live="assertive"></div>
 
     <!-- Results -->
     <div class="results" id="results">
@@ -958,7 +958,7 @@
               <circle class="srf" id="ring-fill" cx="44" cy="44" r="38"
                 stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
             </svg>
-            <div class="score-num" id="ring-num">–</div>
+            <div class="score-num" id="ring-num" role="status" aria-live="polite">–</div>
           </div>
           <div class="score-right">
             <div class="score-lbl">Skóre bezpečnosti</div>
@@ -971,6 +971,10 @@
               <div class="meta-item">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 <span class="meta-val" id="m-time">–</span>
+              </div>
+              <div class="meta-item" id="meta-elev" style="display:none">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 20l7-7 4 4 9-11"/></svg>
+                <span class="meta-val" id="m-elev">–</span>
               </div>
             </div>
           </div>
@@ -1544,6 +1548,17 @@ function drawElevation(alt) {
 
   _drawElevBase(ctx, W, H, prof, dists, eles, minD, maxD, minE, maxE, MT, ML, cw, ch, xy);
 
+  // Compute & display total ascent/descent
+  if (eles.length > 1) {
+    let asc = 0, desc = 0;
+    for (let i = 1; i < eles.length; i++) {
+      const d = eles[i] - eles[i-1];
+      if (d > 0) asc += d; else desc -= d;
+    }
+    $('m-elev').textContent = `↑${Math.round(asc)}m ↓${Math.round(desc)}m`;
+    $('meta-elev').style.display = '';
+  }
+
   // Stats
   let asc = 0, desc = 0;
   for (let i = 1; i < eles.length; i++) {
@@ -1794,9 +1809,11 @@ function shareRoute() {
   }).catch(fb);
 }
 
-/* ── Enter key ───────────────────────────────────────────── */
-document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && ['inp-start','inp-end'].includes(document.activeElement?.id)) doRoute();
+/* ── Enter key → submit route ────────────────────────────── */
+['inp-start', 'inp-end'].forEach(id => {
+  $(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); doRoute(); }
+  });
 });
 
 /* ── Input: clear saved coords on manual edit ────────────── */

@@ -15,6 +15,8 @@ import math
 import requests
 from django.conf import settings
 
+from routing.services.geo_utils import haversine_m
+
 logger = logging.getLogger(__name__)
 
 LOCAL_GH_URL = "http://localhost:8991/route"
@@ -136,14 +138,6 @@ def _parse_gh_path(path: dict) -> dict:
 
 # ── Elevation ─────────────────────────────────────────────────────────────────
 
-def _haversine_m(lng1, lat1, lng2, lat2) -> float:
-    R = 6_371_000
-    φ1, φ2 = math.radians(lat1), math.radians(lat2)
-    dφ = φ2 - φ1
-    dλ = math.radians(lng2 - lng1)
-    a  = math.sin(dφ/2)**2 + math.cos(φ1) * math.cos(φ2) * math.sin(dλ/2)**2
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
 
 def _build_elevation_profile(coords: list) -> list:
     """
@@ -156,7 +150,7 @@ def _build_elevation_profile(coords: list) -> list:
     cum_dist  = 0.0
     for i, c in enumerate(coords):
         if i > 0:
-            cum_dist += _haversine_m(coords[i-1][0], coords[i-1][1], c[0], c[1])
+            cum_dist += haversine_m(coords[i-1][0], coords[i-1][1], c[0], c[1])
         profile.append([round(cum_dist / 1000, 3), round(c[2], 1)])
     return profile
 

@@ -1,11 +1,14 @@
 import uuid
-from django.contrib.gis.db import models
+from datetime import timedelta
+from django.utils import timezone
+from django.db import models
 
 
 class AccidentPoint(models.Model):
-    """Single traffic accident location loaded from opendata.ostrava.cz."""
+    """Single traffic accident location loaded from policie.gov.cz."""
 
-    location = models.PointField(srid=4326)
+    latitude = models.FloatField(db_index=True)
+    longitude = models.FloatField(db_index=True)
     date = models.DateField(null=True, blank=True)
     severity = models.CharField(max_length=50, blank=True)
     description = models.TextField(blank=True)
@@ -14,14 +17,16 @@ class AccidentPoint(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=['date']),
+            models.Index(fields=['latitude', 'longitude']),
         ]
 
     def __str__(self):
-        return f"Accident at {self.location} on {self.date} [{self.severity}]"
+        return f"Accident at ({self.latitude}, {self.longitude}) on {self.date} [{self.severity}]"
 
 
 class RouteCache(models.Model):
     """Cache computed routes so repeated identical queries are instant."""
+    CACHE_TTL = timedelta(days=1)
 
     start_normalized = models.CharField(max_length=500, db_index=True)
     end_normalized = models.CharField(max_length=500, db_index=True)
@@ -36,6 +41,10 @@ class RouteCache(models.Model):
 
     def __str__(self):
         return f"Cache: {self.start_normalized} → {self.end_normalized}"
+
+    def is_expired(self):
+        return timezone.now() - self.created_at > self.CACHE_TTL
+
 
 
 class SavedRoute(models.Model):
