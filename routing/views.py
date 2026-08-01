@@ -57,9 +57,22 @@ def compute_route(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Normalise for cache lookup
-    cache_key_start = start_raw.lower()
-    cache_key_end   = end_raw.lower()
+    try:
+        start_lat_r = request.data.get('start_lat')
+        start_lng_r = request.data.get('start_lng')
+        if start_lat_r is not None and start_lng_r is not None:
+            cache_key_start = f"{float(start_lat_r):.5f},{float(start_lng_r):.5f}"
+        else:
+            cache_key_start = start_raw.lower()
+
+        end_lat_r = request.data.get('end_lat')
+        end_lng_r = request.data.get('end_lng')
+        if end_lat_r is not None and end_lng_r is not None:
+            cache_key_end = f"{float(end_lat_r):.5f},{float(end_lng_r):.5f}"
+        else:
+            cache_key_end = end_raw.lower()
+    except (ValueError, TypeError):
+        return Response({'error': 'Neplatné souřadnice.'}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
     cached = RouteCache.objects.filter(
         start_normalized=cache_key_start,
