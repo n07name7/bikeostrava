@@ -7,5 +7,5 @@ pip install -r requirements.txt
 
 python manage.py collectstatic --noinput
 python manage.py migrate --noinput
-python manage.py createcachetable 2>/dev/null || true
+python manage.py createcachetable || true
 python manage.py load_accidents --months 24

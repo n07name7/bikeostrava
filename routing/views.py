@@ -9,6 +9,9 @@ import logging
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
+import requests
+from django.core.exceptions import ValidationError
+from django.conf import settings
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
@@ -27,14 +30,10 @@ from routing.gpx import generate_route_gpx
 
 logger = logging.getLogger(__name__)
 
-# Ostrava metropolitan area bounds (generous - covers all districts)
-_OSTRAVA_LAT_MIN, _OSTRAVA_LAT_MAX = 49.73, 49.92
-_OSTRAVA_LNG_MIN, _OSTRAVA_LNG_MAX = 18.09, 18.47
-
-
 def _within_ostrava(lat: float, lng: float) -> bool:
-    return (_OSTRAVA_LAT_MIN <= lat <= _OSTRAVA_LAT_MAX and
-            _OSTRAVA_LNG_MIN <= lng <= _OSTRAVA_LNG_MAX)
+    bbox = settings.OSTRAVA_BBOX
+    return (bbox['lat_min'] <= lat <= bbox['lat_max'] and
+            bbox['lng_min'] <= lng <= bbox['lng_max'])
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +123,8 @@ def compute_route(request):
         )
     except ValueError as exc:
         return Response({'error': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    except requests.RequestException as exc:
+        return Response({'error': 'Nepodařilo se připojit k mapovému serveru. Zkuste to prosím znovu.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
     # --- Green zones, accident points and POIs - fetched in parallel (mostly) ---
     primary_coords = route_results[0]['coordinates']
@@ -245,7 +246,7 @@ def get_route_by_id(request, route_id):
         saved = SavedRoute.objects.get(id=route_id)
     except SavedRoute.DoesNotExist:
         return Response({'error': 'Trasa nenalezena.'}, status=status.HTTP_404_NOT_FOUND)
-    except Exception:
+    except (ValueError, ValidationError):
         return Response({'error': 'Neplatné ID trasy.'}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response(saved.route_data)
@@ -261,7 +262,7 @@ def download_pdf(request, route_id):
         saved = SavedRoute.objects.get(id=route_id)
     except SavedRoute.DoesNotExist:
         return Response({'error': 'Trasa nenalezena.'}, status=status.HTTP_404_NOT_FOUND)
-    except Exception:
+    except (ValueError, ValidationError):
         return Response({'error': 'Neplatné ID trasy.'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
@@ -290,7 +291,7 @@ def download_gpx(request, route_id):
         saved = SavedRoute.objects.get(id=route_id)
     except SavedRoute.DoesNotExist:
         return Response({'error': 'Trasa nenalezena.'}, status=status.HTTP_404_NOT_FOUND)
-    except Exception:
+    except (ValueError, ValidationError):
         return Response({'error': 'Neplatné ID trasy.'}, status=status.HTTP_400_BAD_REQUEST)
 
     gpx_bytes = generate_route_gpx(saved)

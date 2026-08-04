@@ -25,8 +25,8 @@
       --a-glow:  rgba(0,212,170,0.30);
       --a-muted: rgba(0,212,170,0.10);
       --text:    #E8F0F8;
-      --muted:   #7A8898;
-      --dim:     #3E4C5A;
+      --muted:   #9BA9B8;
+      --dim:     #999999;
       --green:   #22C55E;
       --yellow:  #FBBF24;
       --red:     #FF5252;
@@ -916,10 +916,10 @@
     </button>
 
     <div class="chips">
-      <span class="chip" onclick="fill('VŠB-TUO Ostrava Poruba','Masarykovo náměstí Ostrava')">VŠB → centrum</span>
-      <span class="chip" onclick="fill('Hlavní nádraží Ostrava','Sad Boženy Němcové Ostrava')">Nádraží → park</span>
-      <span class="chip" onclick="fill('Forum Nová Karolina Ostrava','Stodolní Ostrava')">Karolina → Stodolní</span>
-      <span class="chip" onclick="fill('Ostrava Poruba','Ostrava-Jih')">Poruba → Jih</span>
+      <span class="chip" role="button" tabindex="0" onclick="fill('VŠB-TUO Ostrava Poruba','Masarykovo náměstí Ostrava')">VŠB → centrum</span>
+      <span class="chip" role="button" tabindex="0" onclick="fill('Hlavní nádraží Ostrava','Sad Boženy Němcové Ostrava')">Nádraží → park</span>
+      <span class="chip" role="button" tabindex="0" onclick="fill('Forum Nová Karolina Ostrava','Stodolní Ostrava')">Karolina → Stodolní</span>
+      <span class="chip" role="button" tabindex="0" onclick="fill('Ostrava Poruba','Ostrava-Jih')">Poruba → Jih</span>
     </div>
 
     <div class="sep"></div>
@@ -1141,6 +1141,7 @@ function fill(a, b) {
   const s = $('inp-start'), e = $('inp-end');
   s.value = a; delete s.dataset.lat; delete s.dataset.lng;
   e.value = b; delete e.dataset.lat; delete e.dataset.lng;
+  doRoute();
 }
 
 function scoreColor(s) { return s >= 70 ? '#22C55E' : s >= 45 ? '#FBBF24' : '#FF5252'; }
@@ -1779,7 +1780,7 @@ function renderRecent() {
     if (history.length === 0) { section.style.display = 'none'; return; }
     section.style.display = '';
     $('recent-list').innerHTML = history.map(h => `
-      <div class="recent-item" onclick="location.href='/?route=${h.id}'">
+      <div class="recent-item" role="button" tabindex="0" onclick="location.href='/?route=${h.id}'">
         <div class="recent-score" style="color:${scoreColor(h.score)}">${h.score}</div>
         <div class="recent-route">
           <div class="recent-addrs">${h.start} → ${h.end}</div>
@@ -1845,7 +1846,7 @@ map.on('click', async function(e) {
       const parts = [p.name, p.street, p.housenumber, p.city||p.town||p.village].filter(Boolean);
       if (parts.length) address = parts.join(', ');
     }
-  } catch(_) {}
+  } catch(e) { console.warn('Reverse geocode failed:', e); }
   const addrEsc = address.replace(/'/g, "\\'");
   L.popup({ closeButton:true })
     .setLatLng([lat, lng])

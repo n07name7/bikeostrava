@@ -10,7 +10,6 @@ Requests up to 3 alternative routes from GraphHopper; returns a list of route
 dicts so the caller can score and present each alternative.
 """
 import logging
-import math
 
 import requests
 from django.conf import settings
@@ -18,8 +17,6 @@ from django.conf import settings
 from routing.services.geo_utils import haversine_m
 
 logger = logging.getLogger(__name__)
-
-LOCAL_GH_URL = "http://localhost:8991/route"
 
 # road_class values GraphHopper returns → our category
 BIKE_FRIENDLY = {"cycleway", "path", "footway", "pedestrian", "living_street", "track"}
@@ -82,7 +79,7 @@ def _graphhopper_local(start_lat, start_lng, end_lat, end_lng) -> list[dict]:
         "alternative_route.max_weight_factor": 1.4,
         "alternative_route.max_share_factor":  0.6,
     }
-    response = requests.post(LOCAL_GH_URL, json=payload, timeout=15)
+    response = requests.post(settings.GRAPHHOPPER_URL, json=payload, timeout=15)
     response.raise_for_status()
     data = response.json()
     if "message" in data:

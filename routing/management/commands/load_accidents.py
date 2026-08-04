@@ -33,18 +33,17 @@ class Command(BaseCommand):
         parser.add_argument("--clear", action="store_true")
 
     def handle(self, *args, **options):
-        # Clear existing
-        count = AccidentPoint.objects.count()
-        AccidentPoint.objects.all().delete()
-        self.stdout.write(self.style.WARNING(f"Deleted {count} records."))
-
         json_path = os.path.join(os.path.dirname(__file__), "accidents.json")
         if not os.path.exists(json_path):
             self.stdout.write(self.style.ERROR(f"File not found: {json_path}"))
             return
 
-        with open(json_path, "r") as f:
-            records = json.load(f)
+        try:
+            with open(json_path, "r") as f:
+                records = json.load(f)
+        except json.JSONDecodeError as exc:
+            self.stdout.write(self.style.ERROR(f"Invalid JSON file: {exc}"))
+            return
 
         points = []
         for r in records:
@@ -59,6 +58,10 @@ class Command(BaseCommand):
                 logger.debug("Skipping record %s: %s", r, exc)
 
         with transaction.atomic():
+            count = AccidentPoint.objects.count()
+            AccidentPoint.objects.all().delete()
+            self.stdout.write(self.style.WARNING(f"Deleted {count} records."))
+            
             AccidentPoint.objects.bulk_create(points, batch_size=500, ignore_conflicts=True)
             
         self.stdout.write(self.style.SUCCESS(f"Saved {len(points)} records to DB."))

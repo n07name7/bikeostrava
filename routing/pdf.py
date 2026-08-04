@@ -19,6 +19,7 @@ import io
 import math
 import logging
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests as _requests
 
@@ -37,9 +38,26 @@ from reportlab.platypus import (
 logger = logging.getLogger(__name__)
 
 # ── Fonts ─────────────────────────────────────────────────────────────────────
-_FONT_DIR = "/usr/share/fonts/truetype/dejavu"
-pdfmetrics.registerFont(TTFont("DejaVu",      f"{_FONT_DIR}/DejaVuSans.ttf"))
-pdfmetrics.registerFont(TTFont("DejaVu-Bold", f"{_FONT_DIR}/DejaVuSans-Bold.ttf"))
+import os
+_FONT_PATHS = [
+    '/usr/share/fonts/truetype/dejavu',
+    '/usr/share/fonts/dejavu',
+    '/usr/local/share/fonts/dejavu',
+]
+
+def _find_font_dir():
+    for p in _FONT_PATHS:
+        if os.path.isdir(p):
+            return p
+    return None
+
+_FONT_DIR = _find_font_dir()
+_DEFAULT_FONT = "DejaVu" if _FONT_DIR else "Helvetica"
+_DEFAULT_FONT_BOLD = "DejaVu-Bold" if _FONT_DIR else "Helvetica-Bold"
+
+if _FONT_DIR:
+    pdfmetrics.registerFont(TTFont("DejaVu",      f"{_FONT_DIR}/DejaVuSans.ttf"))
+    pdfmetrics.registerFont(TTFont("DejaVu-Bold", f"{_FONT_DIR}/DejaVuSans-Bold.ttf"))
 
 # ── Colours (aligned with new 2026 design system) ─────────────────────────────
 C_BG      = colors.HexColor("#0A0F14")   # --bg
@@ -82,11 +100,14 @@ def _fmt_dist(m: int) -> str:
 
 
 # ── Style helper ──────────────────────────────────────────────────────────────
-def _style(name, font="DejaVu", size=10, color=C_INK, bold=False,
+def _style(name, font=None, size=10, color=C_INK, bold=False,
            align=TA_LEFT, space_before=0, space_after=6, leading=None):
+    if font is None or font == "DejaVu":
+        font = _DEFAULT_FONT
+    font_name = _DEFAULT_FONT_BOLD if bold and font == _DEFAULT_FONT else font
     return ParagraphStyle(
         name,
-        fontName="DejaVu-Bold" if bold else font,
+        fontName=font_name,
         fontSize=size,
         textColor=color,
         alignment=align,
@@ -152,16 +173,28 @@ def _fetch_osm_map(coords, target_w=900):
     composite = Image.new("RGB",
                           ((tx1 - tx0 + 1) * _TILE_SIZE, (ty1_v - ty0_v + 1) * _TILE_SIZE),
                           (220, 220, 220))
-    for tx in range(tx0, tx1 + 1):
-        for ty in range(ty0_v, ty1_v + 1):
-            url = _OSM_URL.format(z=zoom, x=tx, y=ty)
-            try:
-                r = _requests.get(url, headers=_OSM_HEADERS, timeout=6)
-                if r.status_code == 200:
-                    composite.paste(Image.open(io.BytesIO(r.content)).convert("RGB"),
-                                    ((tx - tx0) * _TILE_SIZE, (ty - ty0_v) * _TILE_SIZE))
-            except Exception as e:
-                logger.debug("Tile %s: %s", url, e)
+
+    def _fetch_tile(tx, ty, url):
+        try:
+            r = _requests.get(url, headers=_OSM_HEADERS, timeout=6)
+            if r.status_code == 200:
+                return tx, ty, r.content
+        except Exception as e:
+            logger.debug("Tile %s: %s", url, e)
+        return tx, ty, None
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {}
+        for tx in range(tx0, tx1 + 1):
+            for ty in range(ty0_v, ty1_v + 1):
+                url = _OSM_URL.format(z=zoom, x=tx, y=ty)
+                futures[pool.submit(_fetch_tile, tx, ty, url)] = (tx, ty)
+
+        for f in as_completed(futures):
+            tx, ty, data = f.result()
+            if data:
+                composite.paste(Image.open(io.BytesIO(data)).convert("RGB"),
+                                ((tx - tx0) * _TILE_SIZE, (ty - ty0_v) * _TILE_SIZE))
 
     def to_px(lng, lat):
         return int(_lng2px(lng, tx0, zoom)), int(_lat2px(lat, ty0_v, zoom))
@@ -283,7 +316,7 @@ class _ElevationChart(Flowable):
         c.drawPath(line, stroke=1, fill=0)
 
         # Y-axis labels
-        c.setFont("DejaVu", 7)
+        c.setFont(_DEFAULT_FONT, 7)
         c.setFillColor(C_MUTED)
         for i in range(n_grid + 1):
             e = min_e + i * (max_e - min_e) / n_grid
@@ -302,7 +335,7 @@ class _ElevationChart(Flowable):
         ascent  = sum(max(0, pts[i][1] - pts[i-1][1]) for i in range(1, len(pts)))
         descent = sum(max(0, pts[i-1][1] - pts[i][1]) for i in range(1, len(pts)))
         c.setFillColor(C_MUTED)
-        c.setFont("DejaVu", 7)
+        c.setFont(_DEFAULT_FONT, 7)
         stats = f"↑ {int(ascent)} m   ↓ {int(descent)} m"
         c.drawRightString(ML + cw, MB + ch + 2, stats)
 
@@ -323,7 +356,7 @@ class _CanvasMap(Flowable):
         c.setFillColor(C_S1); c.setStrokeColor(C_S3); c.setLineWidth(0.5)
         c.rect(0, 0, self.width, self.height, fill=1, stroke=1)
         if not self.coords or len(self.coords) < 2:
-            c.setFillColor(C_MUTED); c.setFont("DejaVu", 9)
+            c.setFillColor(C_MUTED); c.setFont(_DEFAULT_FONT, 9)
             c.drawCentredString(self.width/2, self.height/2, "Mapa nedostupná")
             return
         lngs = [p[0] for p in self.coords]; lats = [p[1] for p in self.coords]
@@ -504,7 +537,7 @@ def generate_route_pdf(saved_route) -> bytes:
             ("ROWBACKGROUNDS",(0,1),(-1,-1), [C_S1, C_S2, C_S1]),
             ("TOPPADDING",    (0,0),(-1,-1), 5), ("BOTTOMPADDING", (0,0),(-1,-1), 5),
             ("LEFTPADDING",   (0,0),(-1,-1), 10), ("RIGHTPADDING",  (0,0),(-1,-1), 10),
-            ("FONTNAME",      (0,0),(-1,-1), "DejaVu"),
+            ("FONTNAME",      (0,0),(-1,-1), _DEFAULT_FONT),
             ("ALIGN",         (1,0),(-1,-1), "CENTER"),
             ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
         ]))
@@ -519,7 +552,7 @@ def generate_route_pdf(saved_route) -> bytes:
         return [
             Paragraph(label, _style("BL", size=9, color=C_TEXT)),
             Paragraph(f'<font color="#{col.hexval()[2:]}">{_bar(v)}</font>',
-                      _style("BR", size=8, color=col, font="DejaVu", leading=10)),
+                      _style("BR", size=8, color=col, font=_DEFAULT_FONT, leading=10)),
             Paragraph(str(val) if val is not None else "N/A",
                       _style("BV", size=10, bold=True, color=col, align=TA_CENTER)),
         ]
@@ -579,7 +612,7 @@ def generate_route_pdf(saved_route) -> bytes:
             ("ROWBACKGROUNDS",(0,1),(-1,-1), [C_S1, C_S2] * 40),
             ("TOPPADDING",    (0,0),(-1,-1), 4), ("BOTTOMPADDING", (0,0),(-1,-1), 4),
             ("LEFTPADDING",   (0,0),(-1,-1), 8),  ("RIGHTPADDING",  (0,0),(-1,-1), 8),
-            ("FONTNAME",      (0,0),(-1,-1), "DejaVu"),
+            ("FONTNAME",      (0,0),(-1,-1), _DEFAULT_FONT),
             ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
             ("ALIGN",         (0,1),(0,-1),  "CENTER"),
             ("ALIGN",         (2,0),(2,-1),  "RIGHT"),

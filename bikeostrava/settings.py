@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 import dj_database_url
 from decouple import config, Csv
@@ -178,3 +177,10 @@ RATELIMIT_USE_CACHE = 'default'
 # django-ratelimit 4.1 only "officially" supports Memcached/Redis.
 # DB cache works fine for our load - silence the startup error.
 SILENCED_SYSTEM_CHECKS = ['django_ratelimit.E003', 'django_ratelimit.W001']
+
+GRAPHHOPPER_URL = config('GRAPHHOPPER_URL', default='http://localhost:8991/route')
+
+OSTRAVA_BBOX = {
+    'lat_min': 49.77, 'lat_max': 49.87,
+    'lng_min': 18.10, 'lng_max': 18.35,
+}

@@ -18,9 +18,10 @@ NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 
 # Bounding box roughly covering Ostrava + 30 km surroundings
 # Photon: lon_min,lat_min,lon_max,lat_max  (bbox parameter)
-OSTRAVA_BBOX      = "17.8,49.7,18.5,49.95"
 # Nominatim viewbox: lon_min,lat_min,lon_max,lat_max
-NOMINATIM_VIEWBOX = "17.8,49.7,18.5,49.95"
+OSTRAVA_BBOX_STR = f"{settings.OSTRAVA_BBOX['lng_min']},{settings.OSTRAVA_BBOX['lat_min']},{settings.OSTRAVA_BBOX['lng_max']},{settings.OSTRAVA_BBOX['lat_max']}"
+OSTRAVA_BBOX = OSTRAVA_BBOX_STR
+NOMINATIM_VIEWBOX = OSTRAVA_BBOX_STR
 
 
 def geocode(address: str) -> dict:

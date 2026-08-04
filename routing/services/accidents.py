@@ -12,7 +12,7 @@ Provides:
 import logging
 import math
 
-from routing.services.geo_utils import haversine_m
+from routing.services.geo_utils import haversine_m, point_to_segment_dist_m
 
 logger = logging.getLogger(__name__)
 
@@ -50,23 +50,12 @@ def _point_to_line_dist_m(pt_lng: float, pt_lat: float, coordinates: list) -> fl
     for i in range(len(coordinates) - 1):
         seg_lng1, seg_lat1 = coordinates[i][0], coordinates[i][1]
         seg_lng2, seg_lat2 = coordinates[i + 1][0], coordinates[i + 1][1]
-        dist = _point_to_segment_dist_m(pt_lng, pt_lat, seg_lng1, seg_lat1, seg_lng2, seg_lat2)
+        dist = point_to_segment_dist_m(pt_lng, pt_lat, seg_lng1, seg_lat1, seg_lng2, seg_lat2)
         if dist < min_dist:
             min_dist = dist
             if dist < 1.0:  # close enough, skip remaining segments
                 break
     return min_dist
-
-
-def _point_to_segment_dist_m(px, py, ax, ay, bx, by) -> float:
-    """Distance from point P to segment AB, in metres (via haversine)."""
-    dx, dy = bx - ax, by - ay
-    if dx == 0 and dy == 0:
-        return haversine_m(px, py, ax, ay)
-    t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
-    proj_x = ax + t * dx
-    proj_y = ay + t * dy
-    return haversine_m(px, py, proj_x, proj_y)
 
 
 def count_accidents_near_route(coordinates: list, radius_m: int = 100) -> int | None:

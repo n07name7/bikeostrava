@@ -26,7 +26,7 @@ import logging
 import math
 from typing import Optional
 
-from routing.services.geo_utils import haversine_m
+from routing.services.geo_utils import haversine_m, point_to_segment_dist_m
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +46,6 @@ def _total_length_m(coords: list) -> float:
     return total
 
 
-def _point_to_segment_dist_m(px, py, ax, ay, bx, by) -> float:
-    """Minimum distance (metres) from point P to segment AB."""
-    dx, dy = bx - ax, by - ay
-    if dx == 0 and dy == 0:
-        return haversine_m(px, py, ax, ay)
-    t = max(0, min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
-    cx, cy = ax + t * dx, ay + t * dy
-    return haversine_m(px, py, cx, cy)
-
-
 def _min_dist_to_polyline_m(point, polyline) -> float:
     """Minimum distance from *point* [lng, lat] to any segment of *polyline*."""
     px, py = point
@@ -63,7 +53,7 @@ def _min_dist_to_polyline_m(point, polyline) -> float:
     for i in range(len(polyline) - 1):
         ax, ay = polyline[i]
         bx, by = polyline[i + 1]
-        d = _point_to_segment_dist_m(px, py, ax, ay, bx, by)
+        d = point_to_segment_dist_m(px, py, ax, ay, bx, by)
         if d < min_d:
             min_d = d
     return min_d
@@ -77,7 +67,7 @@ def _min_dist_to_ring_m(point, ring) -> float:
     for i in range(n):
         ax, ay = ring[i]
         bx, by = ring[(i + 1) % n]
-        d = _point_to_segment_dist_m(px, py, ax, ay, bx, by)
+        d = point_to_segment_dist_m(px, py, ax, ay, bx, by)
         if d < min_d:
             min_d = d
     return min_d
