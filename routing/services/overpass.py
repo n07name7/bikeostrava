@@ -8,30 +8,48 @@ Two functions are exposed:
 bbox = (lat_min, lng_min, lat_max, lng_max)  - the bounding box of the route.
 """
 import logging
+import time
 
 import requests
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+# Fallback Overpass mirrors - tried in order if primary fails
+_OVERPASS_SERVERS = [
+    None,  # placeholder for settings.OVERPASS_API_URL (primary)
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
+
 
 def _overpass_query(ql: str) -> dict:
-    """Execute an Overpass QL query and return parsed JSON."""
-    try:
-        response = requests.post(
-            settings.OVERPASS_API_URL,
-            data={"data": ql},
-            headers={"User-Agent": "BikeOstrava/1.0 (Contact: admin@bikeostrava.cz)"},
-            timeout=15,
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.Timeout:
-        logger.warning("Overpass API timed out")
-        return {"elements": []}
-    except requests.RequestException as exc:
-        logger.warning("Overpass API error: %s", exc)
-        return {"elements": []}
+    """Execute an Overpass QL query with retry across multiple servers."""
+    servers = [settings.OVERPASS_API_URL] + [s for s in _OVERPASS_SERVERS if s]
+    last_exc = None
+
+    for i, url in enumerate(servers):
+        try:
+            response = requests.post(
+                url,
+                data={"data": ql},
+                headers={"User-Agent": "BikeOstrava/1.0 (Contact: admin@bikeostrava.cz)"},
+                timeout=12,
+            )
+            response.raise_for_status()
+            data = response.json()
+            if i > 0:
+                logger.info("Overpass fallback #%d (%s) succeeded", i, url)
+            return data
+        except (requests.Timeout, requests.RequestException) as exc:
+            last_exc = exc
+            logger.warning("Overpass server %s failed: %s", url, exc)
+            if i < len(servers) - 1:
+                time.sleep(0.3)  # brief pause before trying next server
+            continue
+
+    logger.error("All Overpass servers failed. Last error: %s", last_exc)
+    return {"elements": []}
 
 
 def _route_bbox(route_coords: list, padding_deg: float = 0.01) -> tuple:

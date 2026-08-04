@@ -224,14 +224,17 @@ def compute_route(request):
         'cyclist_pois':    cyclist_pois,
     }
 
-    try:
-        RouteCache.objects.update_or_create(
-            start_normalized=cache_key_start,
-            end_normalized=cache_key_end,
-            defaults={'result_json': response_payload},
-        )
-    except Exception as exc:
-        logger.error("Failed to cache route: %s", exc)
+    # Only cache if we got map context data — avoid caching degraded responses
+    # when Overpass was down (empty green_zones + empty cyclist_pois)
+    if green_zones_slim or cyclist_pois:
+        try:
+            RouteCache.objects.update_or_create(
+                start_normalized=cache_key_start,
+                end_normalized=cache_key_end,
+                defaults={'result_json': response_payload},
+            )
+        except Exception as exc:
+            logger.error("Failed to cache route: %s", exc)
 
     return Response(response_payload, status=status.HTTP_200_OK)
 
